@@ -51,6 +51,70 @@ def main(page: ft.Page):
     ], expand=True, visible=False)
 
     # --- Logic Functions ---
+    def edit_note(e, record):
+        temp = list_view.controls[index]
+        tile = e.control
+        index = list_view.controls.index(tile)
+
+        note_field = ft.TextField(
+            value=record.get("note") or "",
+            label="Edit Note",
+            multiline=True
+        )
+
+        def toggle_off():
+            list_view.controls.pop(index)
+
+        def toggle_on():
+            list_view.controls.insert(index, temp)
+
+        def save_note(ev):
+            new_note = note_field.value
+            
+            success = state["client"].update_field(
+                model="sale.customer",   # <-- replace with your actual model
+                record_id=record["id"],
+                field_name="note",
+                new_value=new_note
+            )
+
+            if success:
+                show_message("Note updated!")
+                record["note"] = new_note  # update UI data
+                page.update()
+            else:
+                show_message("Failed to update note!")
+        
+            list_view.controls[index] = ft.Row(
+                [
+                    note_field,
+                    ft.IconButton(icon=ft.Icons.SAVE, on_click=save_note),
+                    ft.IconButton(icon=ft.Icons.CANCEL, on_click=toggle_off)
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+            )      
+        
+        page.update()
+
+
+    def on_click(e, record):
+        tile = e.control
+        index = list_view.controls.index(tile)
+
+        # toggle behavior
+        if index + 1 < len(list_view.controls) and isinstance(list_view.controls[index + 1], ft.Column):
+            list_view.controls.pop(index + 1)
+        else:
+            dropdown = ft.Column(
+                controls=[
+                    ft.Text(f"Edit {record.get('name')}"),
+                    ft.Text("Option A"),
+                    ft.Text("Option B"),
+                ]
+            )
+            list_view.controls.insert(index + 1, dropdown)
+
+        page.update()
 
     def show_message(text, is_error=False):
         page.snack_bar = ft.SnackBar(
@@ -98,7 +162,7 @@ def main(page: ft.Page):
     # 1. Define the call function as async
     async def make_call(e, phone_number):
         await url_launcher.launch_url(f"tel:{phone_number}", )
-
+    
     def fetch_data():
         if not state["client"]: return
         
@@ -111,13 +175,14 @@ def main(page: ft.Page):
         if table:
             for record in table:
                 phone = record.get('phone_number')
-                print(phone)
 
                 list_view.controls.append(
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.PERSON, color="blue"),
                         title=ft.Text(record.get('name', 'Unknown')),
                         subtitle=ft.Text(f"Note: {record.get('note') or 'No notes'}"),
+                        # Trigger the edit dialog when clicking the row
+                        on_click=partial(edit_note, record=record),
                         
                         # Add a phone icon on the right side
                         trailing=ft.IconButton(

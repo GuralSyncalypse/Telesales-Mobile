@@ -56,3 +56,26 @@ class OdooClient:
         except Exception as e:
             print(f"Fetch Error: {e}")
             return []
+
+    def update_field(self, model : str, record_id, field_name, new_value):
+        if not self.cookies:
+            return False
+            
+        addr = f"{self.url}/web/dataset/call_kw"
+        # We wrap the field_name in a dictionary to tell Odoo what to change
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {
+                "model": model,
+                "method": "write",
+                "args": [[record_id], {field_name: new_value}],
+                "kwargs": {}
+            }
+        }
+        try:
+            res = requests.post(addr, json=payload, cookies=self.cookies, timeout=10)
+            return res.json().get('result') == True
+        except Exception as e:
+            print(f"Dynamic Update Error: {e}")
+            return False
