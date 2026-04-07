@@ -13,7 +13,7 @@ def main(page: ft.Page):
 
     # --- UI Components: Login Screen ---
     # Split URL into IP and Port
-    ip_input = ft.TextField(label="Server IP", value="192.168.1.194", hint_text="e.g. 192.168.x.x")
+    ip_input = ft.TextField(label="Server IP", value="localhost", hint_text="e.g. 192.168.x.x")
     port_input = ft.TextField(label="Port", value="8069", hint_text="Default: 8069")
     
     db_input = ft.TextField(label="Database Name", value="Telesales")
@@ -52,9 +52,10 @@ def main(page: ft.Page):
 
     # --- Logic Functions ---
     def edit_note(e, record):
-        temp = list_view.controls[index]
         tile = e.control
         index = list_view.controls.index(tile)
+
+        original_tile = list_view.controls[index]
 
         note_field = ft.TextField(
             value=record.get("note") or "",
@@ -62,58 +63,38 @@ def main(page: ft.Page):
             multiline=True
         )
 
-        def toggle_off():
-            list_view.controls.pop(index)
-
-        def toggle_on():
-            list_view.controls.insert(index, temp)
+        def restore_original():
+            list_view.controls[index] = original_tile
+            page.update()
 
         def save_note(ev):
             new_note = note_field.value
-            
+
             success = state["client"].update_field(
-                model="sale.customer",   # <-- replace with your actual model
+                model="sale.customer",
                 record_id=record["id"],
                 field_name="note",
                 new_value=new_note
             )
 
             if success:
+                record["note"] = new_note
                 show_message("Note updated!")
-                record["note"] = new_note  # update UI data
-                page.update()
             else:
                 show_message("Failed to update note!")
-        
-            list_view.controls[index] = ft.Row(
-                [
-                    note_field,
-                    ft.IconButton(icon=ft.Icons.SAVE, on_click=save_note),
-                    ft.IconButton(icon=ft.Icons.CANCEL, on_click=toggle_off)
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-            )      
-        
-        page.update()
 
+            restore_original()
 
-    def on_click(e, record):
-        tile = e.control
-        index = list_view.controls.index(tile)
+        edit_row = ft.Row(
+            controls=[
+                note_field,
+                ft.IconButton(icon=ft.Icons.SAVE, on_click=save_note),
+                ft.IconButton(icon=ft.Icons.CANCEL, on_click=lambda _: restore_original())
+            ],
+            alignment=ft.MainAxisAlignment.END
+        )
 
-        # toggle behavior
-        if index + 1 < len(list_view.controls) and isinstance(list_view.controls[index + 1], ft.Column):
-            list_view.controls.pop(index + 1)
-        else:
-            dropdown = ft.Column(
-                controls=[
-                    ft.Text(f"Edit {record.get('name')}"),
-                    ft.Text("Option A"),
-                    ft.Text("Option B"),
-                ]
-            )
-            list_view.controls.insert(index + 1, dropdown)
-
+        list_view.controls[index] = edit_row
         page.update()
 
     def show_message(text, is_error=False):
@@ -175,11 +156,11 @@ def main(page: ft.Page):
         if table:
             for record in table:
                 phone = record.get('phone_number')
-
+                title = f"{record.get('name', 'Unknown')} - {record.get('phone_number', '')}"
                 list_view.controls.append(
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.PERSON, color="blue"),
-                        title=ft.Text(record.get('name', 'Unknown')),
+                        title=ft.Text(title),
                         subtitle=ft.Text(f"Note: {record.get('note') or 'No notes'}"),
                         # Trigger the edit dialog when clicking the row
                         on_click=partial(edit_note, record=record),
