@@ -1,34 +1,50 @@
 import flet as ft
 
-async def main(page: ft.Page):
-    page.title = "Phone Call Test"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+def main(page: ft.Page):
+    page.title = "Navigation Example"
 
-    # The fixed phone number
-    PHONE_NUMBER = "1234567890"
+    # 1. Define the View Switching Function
+    def route_change(route):
+        # Clear existing views (except the base one if desired)
+        page.views.clear()
+        
+        # Route Map: Logic to determine which "page" to show
+        if page.route == "/":
+            page.views.append(
+                ft.View(
+                    "/",
+                    [
+                        ft.AppBar(title=ft.Text("Home")),
+                        ft.Text("Welcome to the Home Page", size=30),
+                        ft.ElevatedButton("Go to Settings", on_click=lambda _: page.push_route("/settings")),
+                    ],
+                )
+            )
+        elif page.route == "/settings":
+            page.views.append(
+                ft.View(
+                    "/settings",
+                    [
+                        ft.AppBar(title=ft.Text("Settings")),
+                        ft.Text("Application Settings", size=30),
+                        ft.ElevatedButton("Back Home", on_click=lambda _: page.go("/")),
+                    ],
+                )
+            )
+        
+        page.update()
 
-    async def handle_call(e):
-        try:
-            # FIX 1: Using the new recommended way to launch URLs
-            # FIX 2: Using 'await' so the coroutine actually runs
-            print(f"Attempting to call: {PHONE_NUMBER}")
-            await ft.UrlLauncher().launch_url(f"tel:{PHONE_NUMBER}")
-        except Exception as ex:
-            print(f"Error launching dialer: {ex}")
+    # 2. Function to handle "Back" button (especially for mobile/web browsers)
+    def view_pop(view):
+        page.views.pop()
+        top_view = page.views[-1]
+        page.go(top_view.route)
 
-    # UI Layout
-    page.add(
-        ft.Icon(icon=ft.Icons.PHONE, size=50),
-        ft.Text(f"Test Dialer", size=30, weight=ft.FontWeight.BOLD),
-        ft.Text(f"Target: {PHONE_NUMBER}", italic=True),
-        ft.Button(
-            "Launch Phone App", 
-            icon=ft.Icons.PHONE,
-            on_click=handle_call  # Flet handles the 'await' for on_click automatically
-        )
-    )
+    # Assign the handlers
+    page.on_route_change = route_change
+    page.on_view_pop = view_pop
 
-# Run the app
-if __name__ == "__main__":
-    ft.run(main)
+    # Initialize the app at the home route
+    page.go(page.route)
+
+ft.app(target=main)

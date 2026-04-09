@@ -2,22 +2,14 @@ import requests
 import json
 
 class OdooClient:
-    def __init__(self, url, db, username, password):
-        self.url = url.rstrip('/')
+    def __init__(self, base_url, db, username, password):
+        self.base_url = base_url.rstrip('/')
         self.db = db
         self.username = username
         self.password = password
         self.cookies = None
         self.uid = None
 
-<<<<<<< Updated upstream
-    def _call_kw(self, model, method, args=None, kwargs=None):
-        if not self.cookies:
-            return None
-
-        addr = f"{self.url}/web/dataset/call_kw"
-
-=======
     def _call_kw(self, model, method, args, kwargs=None):
         """
         Internal helper to handle the Odoo JSON-RPC payload structure.
@@ -25,39 +17,28 @@ class OdooClient:
         if not self.cookies:
             return {"error": "Authentication required"}
 
-        addr = f"{self.url}/web/dataset/call_kw"
->>>>>>> Stashed changes
+        addr = f"{self.base_url}/web/dataset/call_kw"
         payload = {
             "jsonrpc": "2.0",
             "method": "call",
             "params": {
                 "model": model,
                 "method": method,
-<<<<<<< Updated upstream
-                "args": args or [],
-=======
                 "args": args,
->>>>>>> Stashed changes
                 "kwargs": kwargs or {}
             }
         }
 
         try:
             res = requests.post(addr, json=payload, cookies=self.cookies, timeout=10)
-<<<<<<< Updated upstream
-            return res.json().get("result")
-        except Exception as e:
-            print(f"Odoo Call Error: {e}")
-=======
             res.raise_for_status() # Check for HTTP errors
             return res.json()
         except Exception as e:
             print(f"RPC Error ({method} on {model}): {e}")
->>>>>>> Stashed changes
             return None
 
     def login(self):
-        addr = f"{self.url}/web/session/authenticate"
+        addr = f"{self.base_url}/web/session/authenticate"
         payload = {
             "jsonrpc": "2.0",
             "method": "call",
@@ -79,40 +60,6 @@ class OdooClient:
             print(f"Login Error: {e}")
         return False
     
-<<<<<<< Updated upstream
-    def get_record_by_id(self, model, record_id, fields=None):
-        result = self._call_kw(
-            model=model,
-            method="read",
-            args=[[record_id]],
-            kwargs={
-                "fields": fields or []
-            }
-        )
-
-        return result[0] if result else None
-
-    def getPhoneBook(self):
-        result = self._call_kw(
-            model="sale.customer",
-            method="search_read",
-            args=[],
-            kwargs={
-                "fields": ["name", "phone_number", "note"]
-            }
-        )
-
-        return result or []
-
-    def update_field(self, model : str, record_id, field_name, new_value):
-        result = self._call_kw(
-            model=model,
-            method="write",
-            args=[[record_id], {field_name: new_value}]
-        )
-        return result is True
-
-=======
     def get_record_by_id(self, model: str, record_id: int, fields: list = None):
         """
         Fetches a single record by its ID.
@@ -176,4 +123,3 @@ class OdooClient:
         
         # Odoo returns True on successful write
         return response.get('result') is True if response else False
->>>>>>> Stashed changes
