@@ -1,50 +1,60 @@
+import asyncio
+
 import flet as ft
 
-def main(page: ft.Page):
-    page.title = "Navigation Example"
 
-    # 1. Define the View Switching Function
-    def route_change(route):
-        # Clear existing views (except the base one if desired)
+def main(page: ft.Page):
+    page.title = "Routes Example"
+
+    def route_change():
         page.views.clear()
-        
-        # Route Map: Logic to determine which "page" to show
-        if page.route == "/":
+        page.views.append(
+            ft.View(
+                route="/",
+                controls=[
+                    ft.AppBar(
+                        title=ft.Text("Flet app"),
+                    ),
+                    ft.Button(
+                        "Visit Store",
+                        on_click=lambda: asyncio.create_task(
+                            page.push_route("/store")
+                        ),
+                    ),
+                ],
+            )
+        )
+        if page.route == "/store":
             page.views.append(
                 ft.View(
-                    "/",
-                    [
-                        ft.AppBar(title=ft.Text("Home")),
-                        ft.Text("Welcome to the Home Page", size=30),
-                        ft.ElevatedButton("Go to Settings", on_click=lambda _: page.push_route("/settings")),
+                    route="/store",
+                    controls=[
+                        ft.AppBar(
+                            title=ft.Text("Store"),
+                        ),
+                        ft.Button(
+                            "Go Home",
+                            on_click=lambda: asyncio.create_task(
+                                page.push_route("/")
+                            ),
+                        ),
                     ],
                 )
             )
-        elif page.route == "/settings":
-            page.views.append(
-                ft.View(
-                    "/settings",
-                    [
-                        ft.AppBar(title=ft.Text("Settings")),
-                        ft.Text("Application Settings", size=30),
-                        ft.ElevatedButton("Back Home", on_click=lambda _: page.go("/")),
-                    ],
-                )
-            )
-        
         page.update()
 
-    # 2. Function to handle "Back" button (especially for mobile/web browsers)
-    def view_pop(view):
-        page.views.pop()
-        top_view = page.views[-1]
-        page.go(top_view.route)
+    async def view_pop(e):
+        if e.view is not None:
+            print("View pop:", e.view)
+            page.views.remove(e.view)
+            top_view = page.views[-1]
+            await page.push_route(top_view.route)
 
-    # Assign the handlers
     page.on_route_change = route_change
     page.on_view_pop = view_pop
 
-    # Initialize the app at the home route
-    page.go(page.route)
+    route_change()
 
-ft.app(target=main)
+
+if __name__ == "__main__":
+    ft.run(main)

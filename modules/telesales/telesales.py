@@ -1,4 +1,5 @@
 import flet as ft
+import asyncio
 from functools import partial
 from odoo_client import OdooClient
 
@@ -9,55 +10,17 @@ class TelesalesApp:
         self.is_editing = False
        
         self.state = {"client": None}
-        # --- UI Components: Login Screen ---
-        self.logo = ft.Image(
-            src="HTLand-1.png", 
-            width=200,
-            height=150,
-            fit='CONTAIN',
-            margin=ft.Margin.only(top=10, bottom=10)
-        )
-        
-        self.domain_input = ft.TextField(
-            label="Domain Name",
-            icon=ft.Icons.LANGUAGE
-        )
-        
-        self.protocol_checkbox = ft.Checkbox(label="Use HTTPS", value=True)
-
-
-        self.db_input = ft.TextField(label="Database Name", value="Telesales", icon=ft.Icons.STORAGE_ROUNDED)
-        self.user_input = ft.TextField(label="Username", value="admin", icon=ft.Icons.PERSON_OUTLINE)
-        self.pass_input = ft.TextField(label="Password", password=True, can_reveal_password=True, icon=ft.Icons.LOCK_OUTLINED)
-        
-        self.login_button = ft.Button(
-            "HTLand", 
-            icon=ft.Icons.LOGIN, 
-            on_click=self.__on_login,
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
-        )
-
-        self.login_view = ft.Column([
-            self.logo,
-            self.domain_input,
-            ft.Row(controls=[self.protocol_checkbox], alignment=ft.MainAxisAlignment.CENTER),
-            self.db_input,
-            self.user_input,
-            self.pass_input,     
-            self.login_button
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, visible=True)
 
         # --- UI Components: Data Screen ---
         self.list_view = ft.ListView(expand=True, spacing=10, divider_thickness=1)
         self.loading_indicator = ft.ProgressBar(visible=False, color="blue")
         
         self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=self.fetch_data)
-        self.logout_button = ft.TextButton("Logout", icon=ft.Icons.LOGOUT, icon_color=ft.Colors.RED_400, on_click=self.__on_logout)
 
         self.data_view = ft.Column([
             ft.Row([
                 ft.Text("Assigned Customer List", size=20, weight=ft.FontWeight.W_500),
-                ft.Row([self.sync_button, self.logout_button])
+                ft.Row([self.sync_button])
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.loading_indicator,
             self.list_view
@@ -71,112 +34,35 @@ class TelesalesApp:
         self.page.show_dialog(self.page.snack_bar)
         self.page.update()
 
-    def build(self, page: ft.Page):
-        # Do not move this outside the function.
+    def get_view(self, page: ft.Page, back_route="/"):
+        self.page = page
+
+        # Needed for calling
         self.url_launcher = ft.UrlLauncher()
 
-        self.page = page
-        self.page.title = "HTLand CRM"
-        self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.padding = 20
-        self.page.scroll = ft.ScrollMode.ADAPTIVE
-        self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
-        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        # Page config (ONLY if needed, avoid overriding global styles too much)
+        # self.page.theme_mode = ft.ThemeMode.DARK
 
-        # self.__build_tab()
-
-        # Add both views to the page
-        self.page.add(self.login_view, self.data_view)
-
-    def __build_tab(self):
-        # 1. Define the content areas for each "feature"
-        feature_1 = ft.Column([ft.Text("Feature 1: Analytics Dashboard", size=25)], visible=True)
-        feature_2 = ft.Column([ft.Text("Feature 2: Settings & Profile", size=25)], visible=True)
-        feature_3 = ft.Column([ft.Text("Feature 3: Data Export", size=25)], visible=False)
-
-        # 2. Function to handle tab switching
-        def tab_changed(e):
-            # Hide everything first
-            feature_1.visible = False
-            feature_2.visible = False
-            feature_3.visible = False
-            
-            # Show the selected feature based on index
-            index = e.control.selected_index
-            if index == 0:
-                feature_1.visible = True
-            elif index == 1:
-                feature_2.visible = True
-            elif index == 2:
-                feature_3.visible = True
-                
-            self.page.update()
-
-        # 3. Create the Tabs control
-        tabs = ft.Tabs(
-            content=[
-                ft.Tab(label="Analytics", icon=ft.Icons.ANALYTICS),
-                ft.Tab(label="Settings", icon=ft.Icons.SETTINGS),
-                ft.Tab(label="Export", icon=ft.Icons.SAVE_ALT),
+        return ft.View(
+            route=f"/dashboard/marketing/telesales",
+            controls=[
+                ft.AppBar(
+                    title=ft.Text("Telesales"),
+                    leading=ft.IconButton(
+                        icon=ft.Icons.ARROW_BACK,
+                        on_click=lambda e: asyncio.create_task(page.push_route(back_route))
+                    ),
+                ),
+                ft.Column(
+                    [
+                        self.data_view
+                    ],
+                    expand=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                )
             ],
-            selected_index=0,
-            animation_duration=300,
-            on_change=tab_changed,
-            length=5,
-            expand=1 # Allows tabs to take up available space
+            padding=20,
         )
-
-        # 4. Add to page
-        self.page.add(
-            tabs,
-            ft.Divider(),
-            feature_1, 
-            feature_2, 
-            feature_3
-        )
-
-    def __switch_view(self, active_view):
-        """
-        Hides all views and shows only the one passed as an argument.
-        Usage: self.switch_view(self.data_view)
-        """
-        views = [self.login_view, self.data_view]
-        
-        for view in views:
-            view.visible = (view == active_view)
-
-    def __on_login(self):
-        # Validate all fields are filled
-        if not all([self.domain_input.value, self.db_input.value, self.user_input.value, self.pass_input.value]):
-            self.show_message("All fields are required", True)
-            return
-
-        self.login_button.disabled = True
-        self.page.update()
-
-        protocol = "https" if self.protocol_checkbox.value else "http"
-        base_url = f"{protocol}://{self.domain_input.value.strip()}"
-
-        client = OdooClient(base_url, self.db_input.value, self.user_input.value, self.pass_input.value)
-        
-        if client.login():
-            self.state["client"] = client
-            self.__switch_view(self.data_view)
-            self.show_message("Successfully connected!")
-            self.fetch_data() 
-        else:
-            self.show_message("Login Failed: Check IP/Port or credentials", True)
-            self.login_button.disabled = False
-        self.page.update()
-
-    def __on_logout(self):
-        self.state["client"] = None
-        self.pass_input.value = ""
-        
-        self.__switch_view(self.login_view)
-        self.login_button.disabled = False
-        self.show_message("Logged out")
-        self.page.update()
     
     async def make_call(self, e, phone_number):
         await self.url_launcher.launch_url(f"tel:{phone_number}", )
@@ -313,8 +199,3 @@ class TelesalesApp:
 
         self.loading_indicator.visible = False
         self.page.update()
-
-# Launch the app
-if __name__ == "__main__":
-    app = TelesalesApp()
-    ft.run(app.build)
