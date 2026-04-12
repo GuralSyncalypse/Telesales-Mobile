@@ -5,6 +5,8 @@ from functools import partial
 from odoo_client import OdooClient
 from login_view import LoginView
 
+client = OdooClient()
+
 def main(page: ft.Page):
     page.title = "Routes + Box Layout"
     page.padding = 20
@@ -115,7 +117,7 @@ def main(page: ft.Page):
             page.views.append(sales_phone.get_view(page, "/dashboard/marketing"))
 
         page.update()
-
+    
     async def view_pop(e):
         if e.view:
             page.views.remove(e.view)

@@ -2,13 +2,12 @@ import requests
 import json
 
 class OdooClient:
-    def __init__(self, base_url, db, username, password):
+    def __init__(self, base_url = "", db = "", username = "", password = ""):
         self.base_url = base_url.rstrip('/')
         self.db = db
         self.username = username
         self.password = password
-        self.cookies = None
-        self.uid = None
+        self.session = requests.Session() # Persists cookies automatically
 
     def _call_kw(self, model, method, args, kwargs=None):
         """
@@ -30,7 +29,7 @@ class OdooClient:
         }
 
         try:
-            res = requests.post(addr, json=payload, cookies=self.cookies, timeout=10)
+            res = self.session.post(addr, json=payload, timeout=10)
             res.raise_for_status() # Check for HTTP errors
             return res.json()
         except Exception as e:
@@ -49,11 +48,10 @@ class OdooClient:
             }
         }
         try:
-            res = requests.post(addr, json=payload, timeout=10)
+            res = self.session.post(addr, json=payload, timeout=10)
             res.raise_for_status()
             result = res.json().get('result')
             if result:
-                self.uid = result.get('uid')
                 self.cookies = res.cookies
                 return True
         except Exception as e:
@@ -70,7 +68,7 @@ class OdooClient:
         args = [[record_id]]
         kwargs = {"fields": fields} if fields else {}
 
-        response = self._execute_kw(model, "read", args, kwargs)
+        response = self._call_kw(model, "read", args, kwargs)
 
         if response and response.get('result'):
             # 'read' returns a list of dictionaries; 
@@ -79,41 +77,28 @@ class OdooClient:
         
         return None
 
-    def get_table(self, model: str, fields: list = None):
+    def get_table(self, table: str, fields: list = None):
         """
         Fetches customer records using the centralized RPC helper.
         """
-        model = "sale.customer"
+        print(self.username)
+        if not table:
+            return
+
+        model = table
         method = "search_read"
         
         # search_read standard args are usually a domain filter [].
         # kwargs contains the list of fields to fetch.
         kwargs = {
-            "fields": ["name", "phone_number", "note"]
+            "fields": fields
         }
 
-        response = self._call_kw(model, method, args=[], kwargs=kwargs)
+        response = self._call_kw(model, method, args=[[]], kwargs=kwargs)
 
         # Return the result list if it exists, otherwise an empty list
         return response.get('result', []) if response else []
 
-    def getPhoneBook(self):
-        """
-        Fetches customer records using the centralized RPC helper.
-        """
-        model = "sale.customer"
-        method = "search_read"
-        
-        # search_read standard args are usually a domain filter [].
-        # kwargs contains the list of fields to fetch.
-        kwargs = {
-            "fields": ["name", "phone_number", "note"]
-        }
-
-        response = self._call_kw(model, method, args=[], kwargs=kwargs)
-
-        # Return the result list if it exists, otherwise an empty list
-        return response.get('result', []) if response else []
 
     def update_field(self, model: str, record_id: int, field_name: str, new_value):
         # Odoo 'write' expects: [ [ids], {values_dict} ]

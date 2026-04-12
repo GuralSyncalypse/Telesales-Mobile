@@ -1,30 +1,14 @@
 import flet as ft
 import asyncio
 from functools import partial
-from odoo_client import OdooClient
 
 class TelesalesApp:
     protocol = 'https'
 
     def __init__(self):
         self.is_editing = False
-       
-        self.state = {"client": None}
+        self.client = None
 
-        # --- UI Components: Data Screen ---
-        self.list_view = ft.ListView(expand=True, spacing=10, divider_thickness=1)
-        self.loading_indicator = ft.ProgressBar(visible=False, color="blue")
-        
-        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=self.fetch_data)
-
-        self.data_view = ft.Column([
-            ft.Row([
-                ft.Text("Assigned Customer List", size=20, weight=ft.FontWeight.W_500),
-                ft.Row([self.sync_button])
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            self.loading_indicator,
-            self.list_view
-        ], expand=True, visible=False)
 
     def show_message(self, text, is_error=False):
         self.page.snack_bar = ft.SnackBar(
@@ -36,9 +20,24 @@ class TelesalesApp:
 
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page
+        self.client = page.session.store.get("client")
 
         # Needed for calling
         self.url_launcher = ft.UrlLauncher()
+
+        self.list_view = ft.ListView(expand=True, spacing=10, divider_thickness=1)
+        self.loading_indicator = ft.ProgressBar(visible=False, color="blue")
+        
+        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=lambda e: self.fetch_data(page=page))
+
+        self.data_view = ft.Column([
+            ft.Row([
+                ft.Text("Assigned Customer List", size=20, weight=ft.FontWeight.W_500),
+                self.sync_button
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            self.loading_indicator,
+            self.list_view
+        ], expand=True, visible=True)
 
         # Page config (ONLY if needed, avoid overriding global styles too much)
         # self.page.theme_mode = ft.ThemeMode.DARK
@@ -105,7 +104,7 @@ class TelesalesApp:
 
             try:
                 new_note = note_field.value.strip()
-                success = self.state["client"].update_field(
+                success = self.client.update_field(
                     model="sale.customer",
                     record_id=record["id"],
                     field_name="note",
@@ -124,7 +123,7 @@ class TelesalesApp:
                     raise Exception("API rejected update")
 
             except Exception as err:
-                self.show_message(f"Update failed: {str(err)}", color="red")
+                self.show_message(f"Update failed: {str(err)}")
                 save_btn.disabled = False
                 note_field.disabled = False
                 self.page.update()
@@ -163,19 +162,19 @@ class TelesalesApp:
         controls_list[idx] = editor_row
         self.page.update()
 
-    def fetch_data(self):
-        if not self.state["client"]: return
+    def fetch_data(self, e=None, page: ft.Page=None):
+        if not self.client: return
         
         self.loading_indicator.visible = True
         self.list_view.controls.clear()
-        self.page.update()
+        page.update()
 
-        table = self.state["client"].get_table("sale.customer", ["name", "phone_number", "note"])
-
+        table = self.client.get_table("sale.customer", [])
+        print(table)
         if table:
             for record in table:
                 phone = record.get('phone_number')
-                name = record.get('name', 'Unknown')
+                name = record.get('customer_id', 'Unknown')[1]
 
                 self.list_view.controls.append(
                     ft.ListTile(
@@ -198,4 +197,6 @@ class TelesalesApp:
             self.list_view.controls.append(ft.Text("No data found.", italic=True))
 
         self.loading_indicator.visible = False
-        self.page.update()
+        page.update()
+
+        self.show_message(f"Synced!")
