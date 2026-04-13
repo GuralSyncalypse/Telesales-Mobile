@@ -1,110 +1,91 @@
 import requests
-import json
 
 class OdooClient:
-    def __init__(self, base_url = "", db = "", username = "", password = ""):
-        self.base_url = base_url.rstrip('/')
+    def __init__(self, base_url="", db="", api_key=""):
+        self.base_url = f"{base_url.rstrip('/')}/json/2"
         self.db = db
-        self.username = username
-        self.password = password
-        self.session = requests.Session() # Persists cookies automatically
+        self.api_key = api_key
+        self.session = requests.Session()
 
-    def _call_kw(self, model, method, args, kwargs=None):
-        """
-        Internal helper to handle the Odoo JSON-RPC payload structure.
-        """
-        if not self.cookies:
-            return {"error": "Authentication required"}
+        # Set up standard headers for all calls
+        self.session.headers.update({
+            "Authorization": f"bearer {self.api_key}",
+            "X-Odoo-Database": self.db,
+        })
 
-        addr = f"{self.base_url}/web/dataset/call_kw"
+    def check_connection(self):
+        """
+        Attempts to fetch the current user's info to verify the API key.
+        """
+        # In JSON-2, calling 'read' on res.users without IDs 
+        # often isn't enough, so we perform a search for 'me'.
+        # A simple call to 'res.users' 'search_read' with limit 1 is a safe bet.
         payload = {
-            "jsonrpc": "2.0",
-            "method": "call",
-            "params": {
-                "model": model,
-                "method": method,
-                "args": args,
-                "kwargs": kwargs or {}
-            }
+            "domain": [("id", "=", 1)], # Or any simple domain
+            "fields": ["id"],
+            "limit": 1
         }
+        response = self._call("res.users", "search_read", payload)
+        
+        # If we get a list (even if empty), the key and DB are valid.
+        # If the key is wrong, self._call will return None or raise an error.
+        return response is not None
 
+    def _call(self, model, method, payload=None):
+        """
+        Simplified helper for the new REST-like structure:
+        URL: {base_url}/json/2/{model}/{method}
+        """
+        addr = f"{self.base_url}/{model}/{method}"
+        print("Call!")
         try:
-            res = self.session.post(addr, json=payload, timeout=10)
-            res.raise_for_status() # Check for HTTP errors
+            # In JSON-2, you send the arguments directly in the body
+            res = self.session.post(addr, json=payload or {}, timeout=10)
+            res.raise_for_status()
+            # JSON-2 returns the data directly, not wrapped in a 'result' key
             return res.json()
         except Exception as e:
-            print(f"RPC Error ({method} on {model}): {e}")
+            print(f"API Error ({method} on {model}): {e}")
+
+            if res.status_code == 403:
+            # This will print the actual Odoo error (e.g., "Access Denied by record rule")
+                print(f"Detailed 403 Error: {res.text}")
+
             return None
 
-    def login(self):
-        addr = f"{self.base_url}/web/session/authenticate"
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "call",
-            "params": {
-                "db": self.db,
-                "login": self.username,
-                "password": self.password
-            }
-        }
-        try:
-            res = self.session.post(addr, json=payload, timeout=10)
-            res.raise_for_status()
-            result = res.json().get('result')
-            if result:
-                self.cookies = res.cookies
-                return True
-        except Exception as e:
-            print(f"Login Error: {e}")
-        return False
-    
     def get_record_by_id(self, model: str, record_id: int, fields: list = None):
         """
         Fetches a single record by its ID.
-        :param fields: Optional list of field names to retrieve. 
-                    If None, Odoo returns all accessible fields.
+        JSON-2 'read' takes 'ids' and 'fields' directly in the body.
         """
-        # Odoo 'read' expects: [ [ids], [fields] ]
-        args = [[record_id]]
-        kwargs = {"fields": fields} if fields else {}
-
-        response = self._call_kw(model, "read", args, kwargs)
-
-        if response and response.get('result'):
-            # 'read' returns a list of dictionaries; 
-            # since we passed one ID, we return the first element.
-            return response['result'][0]
-        
-        return None
-
-    def get_table(self, table: str, fields: list = None):
-        """
-        Fetches customer records using the centralized RPC helper.
-        """
-        print(self.username)
-        if not table:
-            return
-
-        model = table
-        method = "search_read"
-        
-        # search_read standard args are usually a domain filter [].
-        # kwargs contains the list of fields to fetch.
-        kwargs = {
-            "fields": fields
+        payload = {
+            "ids": [record_id],
+            "fields": fields or []
         }
+        response = self._call(model, "read", payload)
+        
+        # Returns a list of records; we return the first one
+        return response[0] if response and isinstance(response, list) else None
 
-        response = self._call_kw(model, method, args=[[]], kwargs=kwargs)
-
-        # Return the result list if it exists, otherwise an empty list
-        return response.get('result', []) if response else []
-
+    def get_table(self, table: str, fields: list = None, domain=None):
+        """
+        Fetches records using search_read.
+        """
+        payload = {
+            "domain": domain or [],
+            "fields": fields or []
+        }
+        # Returns the list of records directly
+        return self._call(table, "search_read", payload) or []
 
     def update_field(self, model: str, record_id: int, field_name: str, new_value):
-        # Odoo 'write' expects: [ [ids], {values_dict} ]
-        args = [[record_id], {field_name: new_value}]
-        
-        response = self._call_kw(model, "write", args)
-        
-        # Odoo returns True on successful write
-        return response.get('result') is True if response else False
+        """
+        Updates a record.
+        JSON-2 'write' takes 'ids' and 'vals' keys.
+        """
+        payload = {
+            "ids": [record_id],
+            "vals": {field_name: new_value}
+        }
+        # Odoo 19 write returns True on success
+        return self._call(model, "write", payload) is True

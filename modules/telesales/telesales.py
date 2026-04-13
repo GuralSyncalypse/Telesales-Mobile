@@ -6,9 +6,106 @@ class TelesalesApp:
     protocol = 'https'
 
     def __init__(self):
+        self.not_called_lv = None
+        self.called_lv = None
+        self.not_called_label = "Chưa gọi"
+        self.called_label = "Đã gọi"
+        self.is_syncing = False
         self.is_editing = False
         self.client = None
+        self.phonebook = {
+            'called': [],
+            'not_called': []
+        }
 
+    def refresh_lists(self):
+        # ✅ Update labels
+        self.not_called_label = f"Chưa gọi ({len(self.phonebook['not_called'])})"
+        self.called_label = f"Đã gọi ({len(self.phonebook['called'])})"
+
+        # ✅ Update list content
+        self.not_called_lv.controls.clear()
+        self.not_called_lv.controls.extend(
+            [self.__build_tile(r) for r in self.phonebook['not_called']]
+        )
+
+        self.called_lv.controls.clear()
+        self.called_lv.controls.extend(
+            [self.__build_tile(r) for r in self.phonebook['called']]
+        )
+
+        self.page.update()
+
+    def __build_tabs(self):
+        # ✅ Create only once
+        if not self.not_called_lv:
+            self.not_called_lv = ft.ListView(
+                expand=True,
+                spacing=10,
+                divider_thickness=1
+            )
+
+            self.called_lv = ft.ListView(
+                expand=True,
+                spacing=10,
+                divider_thickness=1
+            )
+
+            self.tabs = ft.Tabs(
+                length=2,
+                expand=True,
+                content=ft.Column(
+                    expand=True,
+                    controls=[
+                        ft.TabBar(
+                            tabs=[
+                                ft.Tab(label=self.not_called_label),
+                                ft.Tab(label=self.called_label),
+                            ],
+                        ),
+                        ft.TabBarView(
+                            expand=True,
+                            controls=[
+                                self.not_called_lv,
+                                self.called_lv,
+                            ],
+                        ),
+                    ],
+                ),
+            )
+
+        return self.tabs
+
+    def __build_tile(self, record):
+        name = record.get("customer_id")[1]
+        phone = record.get("phone_number")
+        switch_icon_btn = ft.IconButton(
+            icon=ft.Icons.PHONE,
+            icon_color="green",
+            tooltip="Call Customer",
+            on_click=partial(self.make_call, phone_number=phone)
+        ) 
+        switch_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK if record["is_called"] else ft.Icons.ARROW_FORWARD,
+            icon_color="blue",
+            on_click=partial(self.__switch_state, record=record)
+        )
+
+
+        return ft.ListTile(
+            leading=ft.Icon(ft.Icons.PERSON, color="blue"),
+            title=ft.Text(f"{name} - {phone}"),
+            subtitle=ft.Text(f"Note: {record.get('note') or 'No notes'}"),
+            on_click=partial(self.edit_note, record=record),
+            trailing=ft.Row(
+                controls=[
+                    switch_icon_btn,
+                    switch_btn,
+                ],
+                tight=True
+            ),
+            text_color=ft.Colors.GREY_900
+        )
 
     def show_message(self, text, is_error=False):
         self.page.snack_bar = ft.SnackBar(
@@ -18,29 +115,29 @@ class TelesalesApp:
         self.page.show_dialog(self.page.snack_bar)
         self.page.update()
 
+    async def __on_exit(self, page : ft.Page, backroute):
+        self.phonebook = []
+        self.is_editing = False
+        self.is_syncing = False
+
+        await page.push_route(backroute)
+
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page
         self.client = page.session.store.get("client")
 
         # Needed for calling
         self.url_launcher = ft.UrlLauncher()
-
-        self.list_view = ft.ListView(expand=True, spacing=10, divider_thickness=1)
-        self.loading_indicator = ft.ProgressBar(visible=False, color="blue")
         
-        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=lambda e: self.fetch_data(page=page))
+        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=lambda e: asyncio.create_task(self.fetch_data(e, page)))
 
         self.data_view = ft.Column([
             ft.Row([
-                ft.Text("Assigned Customer List", size=20, weight=ft.FontWeight.W_500),
+                ft.Text("Danh sách SĐT", size=20, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_900),
                 self.sync_button
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            self.loading_indicator,
-            self.list_view
+            self.__build_tabs()
         ], expand=True, visible=True)
-
-        # Page config (ONLY if needed, avoid overriding global styles too much)
-        # self.page.theme_mode = ft.ThemeMode.DARK
 
         return ft.View(
             route=f"/dashboard/marketing/telesales",
@@ -49,8 +146,9 @@ class TelesalesApp:
                     title=ft.Text("Telesales"),
                     leading=ft.IconButton(
                         icon=ft.Icons.ARROW_BACK,
-                        on_click=lambda e: asyncio.create_task(page.push_route(back_route))
+                        on_click=lambda e: asyncio.create_task(self.__on_exit(page, back_route))
                     ),
+                    bgcolor=ft.Colors.BLUE
                 ),
                 ft.Column(
                     [
@@ -69,43 +167,54 @@ class TelesalesApp:
     def edit_note(self, e, record):
         if self.is_editing:
             return
-        
-        # 1. Setup Reference and State
+
         self.is_editing = True
         original_tile = e.control
 
-        for control in self.list_view.controls:
-            if control != original_tile:
-                control.disabled = True
+        # 🔹 Find parent ListView dynamically
+        parent = original_tile.parent
+        while parent and not isinstance(parent, ft.ListView):
+            parent = parent.parent
 
-        def validate():
-            if note_field.value != record.get("note"):
-                save_btn.disabled = False
-            else:
-                save_btn.disabled = True
+        if not parent:
+            self.is_editing = False
+            return
 
+        controls_list = parent.controls
+
+        # 🔹 Find index
+        try:
+            idx = controls_list.index(original_tile)
+        except ValueError:
+            self.is_editing = False
+            return
+
+        # 🔹 Validation
+        def validate(e):
+            save_btn.disabled = note_field.value == (record.get("note") or "")
+            self.page.update()
+
+        # 🔹 Restore UI
         def restore_ui():
-            """Resets the list item to its original state."""
             self.is_editing = False
 
-            # Re-enable everything
-            for control in self.list_view.controls:
+            for control in controls_list:
                 control.disabled = False
 
             controls_list[idx] = original_tile
             self.page.update()
 
+        # 🔹 Save handler
         def handle_save(ev):
-
-            # Prevent double-clicking save
             save_btn.disabled = True
             note_field.disabled = True
             self.page.update()
 
             try:
                 new_note = note_field.value.strip()
+
                 success = self.client.update_field(
-                    model="sale.customer",
+                    model="sale.phonebook",
                     record_id=record["id"],
                     field_name="note",
                     new_value=new_note
@@ -113,90 +222,132 @@ class TelesalesApp:
 
                 if success:
                     record["note"] = new_note
-                    # Safely update the original UI component
-                    if hasattr(original_tile, "subtitle"):
-                        original_tile.subtitle = ft.Text(new_note)
-                    
+
+                    # Update UI text
+                    original_tile.subtitle = ft.Text(
+                        f"Note: {new_note or 'No notes'}"
+                    )
+
                     self.show_message("Note updated!")
                     restore_ui()
                 else:
                     raise Exception("API rejected update")
 
             except Exception as err:
-                self.show_message(f"Update failed: {str(err)}")
+                self.show_message(f"Update failed: {str(err)}", is_error=True)
                 save_btn.disabled = False
                 note_field.disabled = False
                 self.page.update()
 
-        # Identify the container (ListView) and the position
-        try:
-            controls_list = self.list_view.controls
-            idx = controls_list.index(original_tile)
-        except (ValueError, AttributeError):
-            self.is_editing = False
-            return
-
-        # 2. Define the Editor UI Components
+        # 🔹 Editor UI
         note_field = ft.TextField(
             value=record.get("note") or "",
             label="Edit Note",
             multiline=True,
-            on_change=validate,
             expand=True,
-            autofocus=True, # Improved UX: user can start typing immediately
+            autofocus=True,
+            on_change=validate
         )
 
-        save_btn = ft.IconButton(icon=ft.Icons.SAVE, tooltip="Save Changes", disabled=True)
-        cancel_btn = ft.IconButton(icon=ft.Icons.CANCEL, tooltip="Cancel")
+        save_btn = ft.IconButton(
+            icon=ft.Icons.SAVE,
+            tooltip="Save Changes",
+            disabled=True
+        )
 
-        # 4. Bind Events and Swap UI
+        cancel_btn = ft.IconButton(
+            icon=ft.Icons.CANCEL,
+            tooltip="Cancel",
+            on_click=lambda _: restore_ui()
+        )
+
         save_btn.on_click = handle_save
-        cancel_btn.on_click = lambda _: restore_ui()
 
         editor_row = ft.Row(
             controls=[note_field, save_btn, cancel_btn],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER
         )
 
+        # 🔥 Replace tile with editor
         controls_list[idx] = editor_row
         self.page.update()
 
-    def fetch_data(self, e=None, page: ft.Page=None):
-        if not self.client: return
-        
-        self.loading_indicator.visible = True
-        self.list_view.controls.clear()
-        page.update()
+    def __switch_state(self, e, record):
+        record["is_called"] = not record["is_called"]
+        record["_switch_btn"].icon = (
+            ft.Icons.ARROW_BACK
+            if record["is_called"]
+            else ft.Icons.ARROW_FORWARD
+        )
+        # 🔹 find ListTile container
+        tile = e.control
+        while tile and not isinstance(tile, ft.ListTile):
+            tile = tile.parent
 
-        table = self.client.get_table("sale.customer", [])
-        print(table)
-        if table:
-            for record in table:
-                phone = record.get('phone_number')
-                name = record.get('customer_id', 'Unknown')[1]
+        if not tile:
+            return
 
-                self.list_view.controls.append(
-                    ft.ListTile(
-                        leading=ft.Icon(ft.Icons.PERSON, color="blue"),
-                        title=ft.Text(f"{name} - {phone}"),
-                        subtitle=ft.Text(f"Note: {record.get('note') or 'No notes'}"),
-                        # Trigger the edit dialog when clicking the row
-                        on_click=partial(self.edit_note, record=record),
-                        
-                        # Add a phone icon on the right side
-                        trailing=ft.IconButton(
-                            icon=ft.Icons.PHONE,
-                            icon_color="green",
-                            tooltip="Call Customer",
-                            on_click=partial(self.make_call, phone_number=phone)
-                        )
-                    )
-                )
+        # 🔹 remove from current list
+        if record["is_called"]:
+            try:
+                self.not_called_lv.controls.remove(tile)
+            except ValueError:
+                pass
+            self.called_lv.controls.append(tile)
         else:
-            self.list_view.controls.append(ft.Text("No data found.", italic=True))
+            try:
+                self.called_lv.controls.remove(tile)
+                tile
+            except ValueError:
+                pass
+            self.not_called_lv.controls.append(tile)
 
-        self.loading_indicator.visible = False
+        self.show_message("Moved succesfully!")
+        self.page.update()
+
+
+    async def fetch_data(self, e, page):
+        page = self.page  # ✅ always safe
+
+        if not self.client:
+            self.show_message("No client!", is_error=True)
+            return
+
+        if self.is_syncing:
+            self.show_message("Đang đồng bộ, vui lòng chờ!")
+            return
+
+        # ✅ lock immediately
+        self.is_syncing = True
+        self.sync_button.disabled = True
         page.update()
 
-        self.show_message(f"Synced!")
+        try:
+            # ✅ ALWAYS fetch (allow refresh)
+            self.phonebook['called'] = await asyncio.to_thread(
+                self.client.get_table,
+                "sale.phonebook",
+                ['customer_id', 'phone_number', 'note', 'is_called'],
+                [["is_called", "=", True]]
+            )
+
+            self.phonebook['not_called'] = await asyncio.to_thread(
+                self.client.get_table,
+                "sale.phonebook",
+                ['customer_id', 'phone_number', 'note', 'is_called'],
+                [["is_called", "=", False]]
+            )
+
+            self.refresh_lists()
+            page.update()
+
+            self.show_message("Synced!")
+
+        except Exception as err:
+            self.show_message(f"Lỗi: {str(err)}", is_error=True)
+
+        finally:
+            # ✅ always restore state
+            self.is_syncing = False
+            self.sync_button.disabled = False
+            page.update()

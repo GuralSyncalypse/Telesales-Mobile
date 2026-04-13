@@ -10,6 +10,27 @@ client = OdooClient()
 def main(page: ft.Page):
     page.title = "Routes + Box Layout"
     page.padding = 20
+    page.theme = ft.Theme(
+        color_scheme=ft.ColorScheme(
+            primary=ft.Colors.BLACK,
+            secondary=ft.Colors.AMBER,
+            on_surface=ft.Colors.WHITE,
+            surface=ft.Colors.GREY_50,
+        ),
+        text_theme=ft.TextTheme(
+            body_medium=ft.TextStyle(size=16),
+            title_large=ft.TextStyle(size=22, weight=ft.FontWeight.BOLD),
+        )
+    )
+
+    page.dark_theme = ft.Theme(
+        color_scheme=ft.ColorScheme(
+            primary=ft.Colors.BLUE_200,
+            on_surface=ft.Colors.BLACK,
+        )
+    )
+
+    page.theme_mode = ft.ThemeMode.LIGHT
 
     # 🔹 Reusable box
     def box(title, icon=None, on_click=None):
@@ -25,11 +46,11 @@ def main(page: ft.Page):
             ),
             padding=10,
             border_radius=15,
-            bgcolor=ft.Colors.BLUE_50,
+            bgcolor=ft.Colors.BLUE,
             width=150,
-            height=100,  # ✅ square
-            on_click=on_click,  # ✅ whole box clickable
-            ink=True,  # ripple effect on click
+            height=100,
+            on_click=on_click,
+            ink=True
         )
 
     def route_change():
@@ -48,6 +69,7 @@ def main(page: ft.Page):
                         ft.AppBar(
                             title=ft.Text("Dashboard"),
                             leading=ft.Icon(ft.Icons.DASHBOARD),
+                            bgcolor=ft.Colors.BLUE
                         ),
 
                         ft.Row(
@@ -95,7 +117,8 @@ def main(page: ft.Page):
                             leading=ft.IconButton(
                                 icon=ft.Icons.ARROW_BACK,
                                 on_click=lambda e: asyncio.create_task(page.push_route("/dashboard"))
-                            )
+                            ),
+                            bgcolor=ft.Colors.BLUE
                         ),
 
                         ft.Row(
@@ -133,9 +156,3 @@ sales_phone = telesales.TelesalesApp()
 login_view = LoginView()
 if __name__ == "__main__":
     ft.run(main)
-
-# box(
-#                                 "Telesales",
-#                                 ft.Icons.PHONE,
-#                                 lambda e: asyncio.create_task(page.push_route("/telesales")),
-#                             ),

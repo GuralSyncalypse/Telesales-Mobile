@@ -1,59 +1,50 @@
-import asyncio
-
 import flet as ft
 
 
 def main(page: ft.Page):
-    page.title = "Routes Example"
-
-    def route_change():
-        page.views.clear()
-        page.views.append(
-            ft.View(
-                route="/",
-                controls=[
-                    ft.AppBar(
-                        title=ft.Text("Flet app"),
-                    ),
-                    ft.Button(
-                        "Visit Store",
-                        on_click=lambda: asyncio.create_task(
-                            page.push_route("/store")
-                        ),
-                    ),
-                ],
-            )
-        )
-        if page.route == "/store":
-            page.views.append(
-                ft.View(
-                    route="/store",
+    page.add(
+        ft.SafeArea(
+            expand=True,
+            content=ft.Tabs(
+                selected_index=1,
+                length=3,
+                expand=True,
+                content=ft.Column(
+                    expand=True,
                     controls=[
-                        ft.AppBar(
-                            title=ft.Text("Store"),
+                        ft.TabBar(
+                            tabs=[
+                                ft.Tab(label="Tab 1", icon=ft.Icons.SETTINGS_PHONE),
+                                ft.Tab(label="Tab 2", icon=ft.Icons.SETTINGS),
+                                ft.Tab(
+                                    label=ft.CircleAvatar(
+                                        foreground_image_src="https://avatars.githubusercontent.com/u/102273996?s=200&amp;v=4",
+                                    ),
+                                ),
+                            ]
                         ),
-                        ft.Button(
-                            "Go Home",
-                            on_click=lambda: asyncio.create_task(
-                                page.push_route("/")
-                            ),
+                        ft.TabBarView(
+                            expand=True,
+                            controls=[
+                                ft.Container(
+                                    alignment=ft.Alignment.CENTER,
+                                    content=ft.Text("This is Tab 1"),
+                                ),
+                                ft.Container(
+                                    alignment=ft.Alignment.CENTER,
+                                    content=ft.Text("This is Tab 2"),
+                                ),
+                                ft.Container(
+                                    alignment=ft.Alignment.CENTER,
+                                    content=ft.Text("This is Tab 3"),
+                                ),
+                            ],
                         ),
                     ],
-                )
-            )
-        page.update()
-
-    async def view_pop(e):
-        if e.view is not None:
-            print("View pop:", e.view)
-            page.views.remove(e.view)
-            top_view = page.views[-1]
-            await page.push_route(top_view.route)
-
-    page.on_route_change = route_change
-    page.on_view_pop = view_pop
-
-    route_change()
+                ),
+            ),
+        )
+    )
 
 
 if __name__ == "__main__":

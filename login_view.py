@@ -26,16 +26,9 @@ class LoginView:
             prefix_icon=ft.Icons.STORAGE
         )
 
-        self.user_input = ft.TextField(
-            label="User / Email",
-            prefix_icon=ft.Icons.PERSON
-        )
-
-        self.password_input = ft.TextField(
-            label="Password",
-            password=True,
-            can_reveal_password=True,
-            prefix_icon=ft.Icons.LOCK
+        self.api_key = ft.TextField(
+            label="API Key",
+            prefix_icon=ft.Icons.KEY
         )
 
         self.login_button = ft.Button(
@@ -70,8 +63,7 @@ class LoginView:
                             self.domain_input,
                             self.https_checkbox,
                             self.db_input,
-                            self.user_input,
-                            self.password_input,
+                            self.api_key,
 
                             ft.Divider(height=20, color="transparent"),
                             self.login_button                        
@@ -83,14 +75,13 @@ class LoginView:
             ]
         )
 
-    # ✅ NOT async anymore
+
     async def handle_login(self, page: ft.Page):
         # Validate
         if not all([
             self.domain_input.value,
             self.db_input.value,
-            self.user_input.value,
-            self.password_input.value
+            self.api_key
         ]):
             self._show(page, "All fields are required", True)
             return
@@ -106,21 +97,20 @@ class LoginView:
         client = OdooClient(
             base_url=base_url,
             db="Odoo",
-            username=self.user_input.value,
-            password=self.password_input.value             
+            api_key=self.api_key.value           
         )
         page.session.store.set("client", client)
 
-        success = client.login()
+        success = client.check_connection()
 
         page.splash = None
 
         if success:
-            # ✅ correct navigation
-            await page.push_route("/dashboard")
-
+            # Save the working client to the session
+            page.session.store.set("client", client)
+            await page.push_route("/dashboard") # Flet 0.21+ uses go_async or go
         else:
-            self._show(page, "Login failed. Check credentials.", True)
+            self._show(page, "Invalid API Key, Database, or URL.", True)
 
         page.update()
 
