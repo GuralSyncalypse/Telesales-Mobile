@@ -26,9 +26,16 @@ class LoginView:
             prefix_icon=ft.Icons.STORAGE
         )
 
-        self.api_key = ft.TextField(
-            label="API Key",
-            prefix_icon=ft.Icons.KEY
+        self.user_input = ft.TextField(
+            label="User / Email",
+            prefix_icon=ft.Icons.PERSON
+        )
+
+        self.password_input = ft.TextField(
+            label="Password",
+            password=True,
+            can_reveal_password=True,
+            prefix_icon=ft.Icons.LOCK
         )
 
         self.login_button = ft.Button(
@@ -63,7 +70,8 @@ class LoginView:
                             self.domain_input,
                             self.https_checkbox,
                             self.db_input,
-                            self.api_key,
+                            self.user_input,
+                            self.password_input,
 
                             ft.Divider(height=20, color="transparent"),
                             self.login_button                        
@@ -75,13 +83,13 @@ class LoginView:
             ]
         )
 
-
     async def handle_login(self, page: ft.Page):
         # Validate
         if not all([
             self.domain_input.value,
             self.db_input.value,
-            self.api_key
+            self.user_input.value,
+            self.password_input.value
         ]):
             self._show(page, "All fields are required", True)
             return
@@ -90,27 +98,25 @@ class LoginView:
         protocol = "https" if self.https_checkbox.value else "http"
         base_url = f"{protocol}://{self.domain_input.value.strip()}"
 
-        # Show loading
-        page.splash = ft.ProgressBar()
-        page.update()
 
         client = OdooClient(
             base_url=base_url,
             db="Odoo",
-            api_key=self.api_key.value           
+            username=self.user_input.value,
+            password=self.password_input.value             
         )
         page.session.store.set("client", client)
 
-        success = client.check_connection()
+        success = client.login()
 
-        page.splash = None
 
         if success:
-            # Save the working client to the session
-            page.session.store.set("client", client)
-            await page.push_route("/dashboard") # Flet 0.21+ uses go_async or go
+            # ✅ correct navigation
+            await page.push_route("/dashboard")
+            self._show(page, "Đăng nhập thành công.", True)
+
         else:
-            self._show(page, "Invalid API Key, Database, or URL.", True)
+            self._show(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông thin.", True)
 
         page.update()
 

@@ -7,7 +7,7 @@ from login_view import LoginView
 
 client = OdooClient()
 
-def main(page: ft.Page):
+async def main(page: ft.Page):
     page.title = "Routes + Box Layout"
     page.padding = 20
     page.theme = ft.Theme(
