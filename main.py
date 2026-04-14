@@ -1,21 +1,23 @@
 import asyncio
 import flet as ft
 from modules.telesales import telesales
-from functools import partial
-from odoo_client import OdooClient
 from login_view import LoginView
+from odoo_client import OdooAPI as OdooAPI
 
-client = OdooClient()
+client = OdooAPI()
 
 async def main(page: ft.Page):
     page.title = "Routes + Box Layout"
     page.padding = 20
+
+    # 🔹 LIGHT THEME
     page.theme = ft.Theme(
         color_scheme=ft.ColorScheme(
-            primary=ft.Colors.BLACK,
+            primary=ft.Colors.BLUE,
             secondary=ft.Colors.AMBER,
-            on_surface=ft.Colors.WHITE,
-            surface=ft.Colors.GREY_50,
+            surface=ft.Colors.WHITE,
+            on_surface=ft.Colors.BLACK,   # ✅ correct contrast
+            on_primary=ft.Colors.WHITE,
         ),
         text_theme=ft.TextTheme(
             body_medium=ft.TextStyle(size=16),
@@ -23,34 +25,44 @@ async def main(page: ft.Page):
         )
     )
 
+    # 🔹 DARK THEME
     page.dark_theme = ft.Theme(
         color_scheme=ft.ColorScheme(
             primary=ft.Colors.BLUE_200,
-            on_surface=ft.Colors.BLACK,
+            secondary=ft.Colors.AMBER_200,
+            surface=ft.Colors.GREY_900,
+            on_surface=ft.Colors.WHITE,   # ✅ correct contrast
+            on_primary=ft.Colors.BLACK,
         )
     )
 
-    page.theme_mode = ft.ThemeMode.LIGHT
+    # 🔹 Default mode
+    page.theme_mode = ft.ThemeMode.DARK
 
     # 🔹 Reusable box
     def box(title, icon=None, on_click=None):
         return ft.Container(
             content=ft.Column(
                 [ 
-                    ft.Icon(icon, size=25) if icon else ft.Container(),
+                    ft.Icon(icon, size=28, color=ft.Colors.PRIMARY),
                     ft.Text(title, size=15, weight="bold"),
                 ],
                 spacing=10,
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER
             ),
-            padding=10,
-            border_radius=15,
-            bgcolor=ft.Colors.BLUE,
+            padding=15,
+            border_radius=20,
             width=150,
             height=100,
+            bgcolor=ft.Colors.SURFACE,
+            shadow=ft.BoxShadow(
+                blur_radius=12,
+                spread_radius=1,
+                color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+            ),
+            ink=True,
             on_click=on_click,
-            ink=True
         )
 
     def route_change():
@@ -67,9 +79,9 @@ async def main(page: ft.Page):
                     route="/dashboard",
                     controls=[
                         ft.AppBar(
-                            title=ft.Text("Dashboard"),
-                            leading=ft.Icon(ft.Icons.DASHBOARD),
-                            bgcolor=ft.Colors.BLUE
+                            title=ft.Text("Dashboard", color=ft.Colors.ON_PRIMARY),
+                            leading=ft.Icon(ft.Icons.DASHBOARD, color=ft.Colors.ON_PRIMARY),
+                            bgcolor=ft.Colors.PRIMARY,
                         ),
 
                         ft.Row(
@@ -113,12 +125,18 @@ async def main(page: ft.Page):
                     route="/dashboard/marketing",
                     controls=[
                         ft.AppBar(
-                            title=ft.Text("Marketing"),
+                            title=ft.Text(
+                                "Marketing",
+                                color=ft.Colors.ON_PRIMARY
+                            ),
                             leading=ft.IconButton(
                                 icon=ft.Icons.ARROW_BACK,
-                                on_click=lambda e: asyncio.create_task(page.push_route("/dashboard"))
+                                icon_color=ft.Colors.ON_PRIMARY,
+                                on_click=lambda e: asyncio.create_task(
+                                    page.push_route("/dashboard")
+                                )
                             ),
-                            bgcolor=ft.Colors.BLUE
+                            bgcolor=ft.Colors.PRIMARY,
                         ),
 
                         ft.Row(

@@ -1,7 +1,7 @@
 import flet as ft
 import asyncio
-from odoo_client import OdooClient
-
+import time
+from odoo_client import OdooAPI as OdooAPI
 
 class LoginView:
     def __init__(self):
@@ -91,7 +91,7 @@ class LoginView:
             self.user_input.value,
             self.password_input.value
         ]):
-            self._show(page, "All fields are required", True)
+            self.show_message(page, "All fields are required", True)
             return
 
         # Build URL
@@ -99,7 +99,7 @@ class LoginView:
         base_url = f"{protocol}://{self.domain_input.value.strip()}"
 
 
-        client = OdooClient(
+        client = OdooAPI(
             base_url=base_url,
             db="Odoo",
             username=self.user_input.value,
@@ -112,18 +112,19 @@ class LoginView:
 
         if success:
             # ✅ correct navigation
+            start = time.perf_counter()
+            self.show_message(page, "Đăng nhập thành công.")
             await page.push_route("/dashboard")
-            self._show(page, "Đăng nhập thành công.", True)
+            end = time.perf_counter()            
+            print(f"Time taken: {end - start:.6f} seconds")
 
         else:
-            self._show(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông thin.", True)
+            self.show_message(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông thin.", True)
+            page.update()
 
-        page.update()
-
-    def _show(self, page, msg, error=False):
+    def show_message(self, page, text, is_error=False):
         page.snack_bar = ft.SnackBar(
-            ft.Text(msg),
-            bgcolor=ft.Colors.RED if error else ft.Colors.GREEN
+            content=ft.Text(text),
+            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400
         )
-        page.snack_bar.open = True
-        page.update()
+        page.show_dialog(page.snack_bar) 

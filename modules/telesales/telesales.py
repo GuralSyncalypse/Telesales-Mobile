@@ -92,14 +92,14 @@ class TelesalesApp:
         )
 
         return ft.ListTile(
-            leading=ft.Icon(
-                ft.Icons.PERSON, 
-                color=ft.Colors.BLUE_GREY if is_called else ft.Colors.BLUE
+            leading = ft.Icon(
+                ft.Icons.PERSON,
+                color=ft.Colors.ON_SURFACE_VARIANT if is_called else ft.Colors.PRIMARY
             ),
             title=ft.Text(
                 f"{name} • {phone}",
                 weight=ft.FontWeight.BOLD,
-                color=ft.Colors.BLACK if not is_called else ft.Colors.GREY_500,
+                color=ft.Colors.ON_SURFACE if not is_called else ft.Colors.ON_SURFACE_VARIANT,
                 spans=[ft.TextSpan(style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH))] if is_called else []
             ),
             subtitle=ft.Text(
@@ -139,7 +139,7 @@ class TelesalesApp:
 
         self.data_view = ft.Column([
             ft.Row([
-                ft.Text("Danh sách SĐT", size=20, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_900),
+                ft.Text("Danh sách SĐT", size=20, weight=ft.FontWeight.W_500),
                 self.sync_button
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.tabs
@@ -149,12 +149,18 @@ class TelesalesApp:
             route=f"/dashboard/marketing/telesales",
             controls=[
                 ft.AppBar(
-                    title=ft.Text("Telesales"),
+                    title=ft.Text(
+                        "Telesales",
+                        color=ft.Colors.ON_PRIMARY
+                    ),
                     leading=ft.IconButton(
                         icon=ft.Icons.ARROW_BACK,
-                        on_click=lambda e: asyncio.create_task(self.__on_exit(page, back_route))
+                        icon_color=ft.Colors.ON_PRIMARY, 
+                        on_click=lambda e: asyncio.create_task(
+                            self.__on_exit(page, back_route)
+                        )
                     ),
-                    bgcolor=ft.Colors.BLUE
+                    bgcolor=ft.Colors.PRIMARY,
                 ),
                 ft.Column(
                     [

@@ -2,50 +2,38 @@ import flet as ft
 
 
 def main(page: ft.Page):
-    page.add(
-        ft.SafeArea(
-            expand=True,
-            content=ft.Tabs(
-                selected_index=1,
-                length=3,
-                expand=True,
-                content=ft.Column(
-                    expand=True,
-                    controls=[
-                        ft.TabBar(
-                            tabs=[
-                                ft.Tab(label="Tab 1", icon=ft.Icons.SETTINGS_PHONE),
-                                ft.Tab(label="Tab 2", icon=ft.Icons.SETTINGS),
-                                ft.Tab(
-                                    label=ft.CircleAvatar(
-                                        foreground_image_src="https://avatars.githubusercontent.com/u/102273996?s=200&amp;v=4",
-                                    ),
-                                ),
-                            ]
-                        ),
-                        ft.TabBarView(
-                            expand=True,
-                            controls=[
-                                ft.Container(
-                                    alignment=ft.Alignment.CENTER,
-                                    content=ft.Text("This is Tab 1"),
-                                ),
-                                ft.Container(
-                                    alignment=ft.Alignment.CENTER,
-                                    content=ft.Text("This is Tab 2"),
-                                ),
-                                ft.Container(
-                                    alignment=ft.Alignment.CENTER,
-                                    content=ft.Text("This is Tab 3"),
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-            ),
-        )
+    page.title = "Theme Switch Demo"
+    page.theme_mode = ft.ThemeMode.LIGHT  # default
+
+    # 🔹 Function to toggle theme
+    def toggle_theme(e):
+        if theme_switch.value:
+            page.theme_mode = ft.ThemeMode.DARK
+        else:
+            page.theme_mode = ft.ThemeMode.LIGHT
+        page.update()
+
+    # 🔹 Switch control
+    theme_switch = ft.Switch(
+        label="Dark Mode",
+        value=False,
+        on_change=toggle_theme
     )
 
+    # 🔹 Example UI components (auto adapt)
+    content = ft.Column(
+        controls=[
+            ft.Text("Hello, Flet!", size=30, weight="bold"),
+            ft.Text("This UI adapts to theme changes."),
+            ft.Button("Click me"),
+            ft.TextField(label="Enter something"),
+            theme_switch,
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
-if __name__ == "__main__":
-    ft.run(main)
+    page.add(content)
+
+
+ft.app(target=main)

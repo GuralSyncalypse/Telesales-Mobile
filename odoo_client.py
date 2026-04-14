@@ -1,7 +1,7 @@
 import requests
 import json
 
-class OdooClient:
+class OdooAPI:
     def __init__(self, base_url = "", db = "", username = "", password = ""):
         self.base_url = base_url.rstrip('/')
         self.db = db
@@ -9,7 +9,7 @@ class OdooClient:
         self.password = password
         self.session = requests.Session() # Persists cookies automatically
 
-    def _call_kw(self, model, method, args, kwargs=None):
+    def __call_kw(self, model, method, args, kwargs=None):
         """
         Internal helper to handle the Odoo JSON-RPC payload structure.
         """
@@ -68,7 +68,7 @@ class OdooClient:
         args = [[record_id]]
         kwargs = {"fields": fields} if fields else {}
 
-        response = self._call_kw(model, "read", args, kwargs)
+        response = self.__call_kw(model, "read", args, kwargs)
 
         if response and response.get('result'):
             # 'read' returns a list of dictionaries; 
@@ -77,7 +77,7 @@ class OdooClient:
         
         return None
 
-    def get_table(self, table: str, domain=[] , fields: list = None):
+    def get_table(self, table: str, domain=[], fields: list = None):
         """
         Fetches customer records using the centralized RPC helper.
         """
@@ -96,17 +96,16 @@ class OdooClient:
             "fields": fields or []
         }
 
-        response = self._call_kw(model, method, args=args, kwargs=kwargs)
+        response = self.__call_kw(model, method, args=args, kwargs=kwargs)
 
         # Return the result list if it exists, otherwise an empty list
         return response.get('result', []) if response else []
-
 
     def update_field(self, model: str, record_id: int, field_name: str, new_value):
         # Odoo 'write' expects: [ [ids], {values_dict} ]
         args = [[record_id], {field_name: new_value}]
         
-        response = self._call_kw(model, "write", args)
+        response = self.__call_kw(model, "write", args)
         
         # Odoo returns True on successful write
         return response.get('result') is True if response else False
