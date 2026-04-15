@@ -6,6 +6,13 @@ from odoo_client import OdooAPI as OdooAPI
 
 client = OdooAPI()
 
+routes = {
+    'dashboard' : '/dashboard',
+    'login': '/login',
+    'marketing': '/dashboard/marketing',
+    'telesales': '/dashboard/marketing/telesales'
+}
+
 async def main(page: ft.Page):
     page.title = "Routes + Box Layout"
     page.padding = 20
@@ -38,6 +45,49 @@ async def main(page: ft.Page):
 
     # 🔹 Default mode
     page.theme_mode = ft.ThemeMode.DARK
+
+    def get_dashboard():
+        return ft.View(
+                    route="/dashboard",
+                    controls=[
+                        ft.AppBar(
+                            title=ft.Text("Dashboard", color=ft.Colors.ON_PRIMARY),
+                            leading=ft.Icon(ft.Icons.DASHBOARD, color=ft.Colors.ON_PRIMARY),
+                            bgcolor=ft.Colors.PRIMARY,
+                        ),
+
+                        ft.Row(
+                            [
+                                box(
+                                    "Nhân Sự",
+                                    ft.Icons.GROUP,
+                                ),
+                                box(
+                                    "Khách Hàng",
+                                    ft.Icons.PERSON_OUTLINE,
+                                )                         
+                            ],
+                            wrap=True,  # responsive
+                            spacing=20,
+                        ),
+                        ft.Row(
+                            [
+                                box(
+                                    "Dự Án",
+                                    ft.Icons.HOUSE,
+                                ),
+                                box(
+                                    "Marketing",
+                                    ft.Icons.CAMPAIGN,
+                                    lambda e: asyncio.create_task(page.push_route(routes["marketing"]))
+                                )
+                            ],
+                            wrap=True,  # responsive
+                            spacing=20
+                        )
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                )
 
     # 🔹 Reusable box
     def box(title, icon=None, on_click=None):
@@ -73,56 +123,16 @@ async def main(page: ft.Page):
         )
 
         # 🔹 HOME VIEW
-        if page.route == "/dashboard":
+        if page.route == routes["dashboard"]:
             page.views.append(
-                ft.View(
-                    route="/dashboard",
-                    controls=[
-                        ft.AppBar(
-                            title=ft.Text("Dashboard", color=ft.Colors.ON_PRIMARY),
-                            leading=ft.Icon(ft.Icons.DASHBOARD, color=ft.Colors.ON_PRIMARY),
-                            bgcolor=ft.Colors.PRIMARY,
-                        ),
-
-                        ft.Row(
-                            [
-                                box(
-                                    "Nhân Sự",
-                                    ft.Icons.GROUP,
-                                ),
-                                box(
-                                    "Khách Hàng",
-                                    ft.Icons.PERSON_OUTLINE,
-                                )                         
-                            ],
-                            wrap=True,  # responsive
-                            spacing=20,
-                        ),
-                        ft.Row(
-                            [
-                                box(
-                                    "Dự Án",
-                                    ft.Icons.HOUSE,
-                                ),
-                                box(
-                                    "Marketing",
-                                    ft.Icons.CAMPAIGN,
-                                    lambda e: asyncio.create_task(page.push_route("/dashboard/marketing"))
-                                )
-                            ],
-                            wrap=True,  # responsive
-                            spacing=20
-                        )
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
-                )
+                get_dashboard()
             )
 
         # 🔹 Marketing View
-        if page.route == "/dashboard/marketing":
+        if page.route == routes["marketing"]:
             page.views.append(
                 ft.View(
-                    route="/dashboard/marketing",
+                    route=routes["marketing"],
                     controls=[
                         ft.AppBar(
                             title=ft.Text(
@@ -133,7 +143,7 @@ async def main(page: ft.Page):
                                 icon=ft.Icons.ARROW_BACK,
                                 icon_color=ft.Colors.ON_PRIMARY,
                                 on_click=lambda e: asyncio.create_task(
-                                    page.push_route("/dashboard")
+                                    page.push_route(routes["dashboard"])
                                 )
                             ),
                             bgcolor=ft.Colors.PRIMARY,
@@ -141,7 +151,7 @@ async def main(page: ft.Page):
 
                         ft.Row(
                             [
-                                box("Telesales", ft.Icons.PHONE, lambda e: asyncio.create_task(page.push_route("/dashboard/marketing/telesales"))),
+                                box("Telesales", ft.Icons.PHONE, lambda e: asyncio.create_task(page.push_route(routes["telesales"]))),
                                 box("Mailing", ft.Icons.MAIL),
                                 box("Posting", ft.Icons.POST_ADD)
                             ],
@@ -154,8 +164,8 @@ async def main(page: ft.Page):
             )
 
         # 🔹 Telesales View
-        if page.route == "/dashboard/marketing/telesales":
-            page.views.append(sales_phone.get_view(page, "/dashboard/marketing"))
+        if page.route == routes["telesales"]:
+            page.views.append(sales_phone.get_view(page, routes["marketing"]))
 
         page.update()
     

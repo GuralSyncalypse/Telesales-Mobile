@@ -1,5 +1,6 @@
 import flet as ft
 import asyncio
+import threading
 from functools import partial
 import time
 
@@ -12,23 +13,28 @@ class TelesalesApp:
 
         self.not_called_lv = None
         self.called_lv = None
+        self.unreachable_lv = None
         
         self.client = None
         self.phonebook = {
             'called': [],
-            'not_called': []
+            'not_called': [],
+            'unreachable': []
         }
 
     def refresh_counters(self):
         # 1. Update the Data Counts
         not_called_count = len(self.phonebook['not_called'])
         called_count = len(self.phonebook['called'])
+        unreachable = len(self.phonebook['unreachable'])
 
         # 2. Update the actual Tab objects
         self.tabs.content.controls[0].tabs[0].label = f"Chưa gọi ({not_called_count})"
         self.tabs.content.controls[0].tabs[1].label = f"Đã gọi ({called_count})"
-        self.tabs.content.controls[0].tabs[0].update()
-        self.tabs.content.controls[0].tabs[1].update()
+        self.tabs.content.controls[0].tabs[2].label = f"Không gọi được ({unreachable})"
+
+        for i in range(0, 3):
+            self.tabs.content.controls[0].tabs[i].update()
 
     def __build_tabs(self):
         if not self.not_called_lv:
@@ -43,38 +49,46 @@ class TelesalesApp:
                 spacing=10,
                 divider_thickness=1
             )
-            
-            tabs = ft.Tabs(
-                length=2,
+
+            self.unreachable_lv = ft.ListView(
                 expand=True,
-                content=ft.Column(
-                    expand=True,
-                    controls=[
-                        ft.TabBar(
-                            tabs=[
-                                ft.Tab(label="Chưa gọi"),
-                                ft.Tab(label="Đã gọi"),
-                            ],
-                        ),
-                        ft.TabBarView(
-                            expand=True,
-                            controls=[
-                                self.not_called_lv,
-                                self.called_lv,
-                            ],
-                        ),
-                    ],
-                ),
+                spacing=10,
+                divider_thickness=1
             )
+            
+        tabs = ft.Tabs(
+            length=3,
+            expand=True,
+            content=ft.Column(
+                expand=True,
+                controls=[
+                    ft.TabBar(
+                        tabs=[
+                            ft.Tab(label="Chưa gọi"),
+                            ft.Tab(label="Đã gọi"),
+                            ft.Tab(label="Không gọi được")
+                        ],
+                    ),
+                    ft.TabBarView(
+                        expand=True,
+                        controls=[
+                            self.not_called_lv,
+                            self.called_lv,
+                            self.unreachable_lv
+                        ],
+                    ),
+                ],
+            ),
+        )
 
         return tabs
 
     def __build_tile(self, record):
         customer_data = record.get("customer_id")
         name = customer_data[1] if isinstance(customer_data, (list, tuple)) else "Unknown Customer"
-        
+
         phone = record.get("phone_number", "No Phone")
-        is_called = record.get("is_called", False)
+        is_called = record.get("is_called")
 
         
         call_btn = ft.IconButton(
@@ -90,6 +104,18 @@ class TelesalesApp:
             data=record,
             on_click=self.__toggle_call_status
         )
+
+        buttons = [call_btn, switch_btn]
+
+        if is_called:
+            buttons.append(
+                ft.IconButton(
+                    icon=ft.Icons.CANCEL,
+                    icon_color=ft.Colors.BLUE,
+                    data=record,
+                    on_click=self.__cancel_number
+                )
+            )
 
         return ft.ListTile(
             leading = ft.Icon(
@@ -111,7 +137,7 @@ class TelesalesApp:
             data=record,
             on_click=self.edit_note,
             trailing=ft.Row(
-                controls=[call_btn, switch_btn],
+                controls=buttons,
                 tight=True,
                 spacing=0, # Keeps buttons close together
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
@@ -133,7 +159,13 @@ class TelesalesApp:
         # Needed for calling
         self.url_launcher = ft.UrlLauncher()
     
-        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=lambda e: asyncio.create_task(self.fetch_data(e)))
+        self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=self.fetch_data)
+        # self.save_button = ft.IconButton(
+        #     icon=ft.Icons.SAVE,
+        #     tooltip="Save changes",
+        #     on_click=self.save_data
+        # )
+
 
         self.tabs = self.__build_tabs()
 
@@ -170,7 +202,6 @@ class TelesalesApp:
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 )
             ],
-            padding=20,
         )
         
     
@@ -178,6 +209,17 @@ class TelesalesApp:
         """
         Handles the UI transition and logic for editing a note within a ListView.
         """
+        def update_note(record):
+            success = self.client.update_field(
+                model="sale.phonebook",
+                record_id=record["id"],
+                field_name="note",
+                new_value=record["note"]
+            )
+
+            if not success:
+                raise Exception("API rejected update")
+
         if self.is_editing:
             return
 
@@ -209,21 +251,16 @@ class TelesalesApp:
             parent.update()
 
             try:
-                new_note = note_field.value.strip()
-                success = self.client.update_field(
-                    model="sale.phonebook",
-                    record_id=record["id"],
-                    field_name="note",
-                    new_value=new_note
-                )
+                record["note"] = note_field.value.strip()
 
-                if success:
-                    record["note"] = new_note
-                    original_tile.subtitle = ft.Text(f"Note: {new_note or 'No notes'}")
-                    self.show_message("Note updated!")
-                    restore_ui()
-                else:
-                    raise Exception("API rejected update")
+                threading.Thread(
+                    target=update_note,
+                    args=(record,)
+                ).start()
+
+                original_tile.subtitle = ft.Text(f"Note: {record["note"] or 'No notes'}")
+                self.show_message("Note updated!")
+                restore_ui()
 
             except Exception as err:
                 self.show_message(f"Update failed: {str(err)}", is_error=True)
@@ -247,10 +284,21 @@ class TelesalesApp:
         # 4. UI Swap
         controls_list[idx] = ft.Row([note_field, save_btn, cancel_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         parent.update()
-        
+           
 
     def __toggle_call_status(self, e):
         """Toggles a record between 'Called' and 'Not Called' states"""
+        def __update_call_status(record):
+            success = self.client.update_field(
+                model="sale.phonebook",
+                record_id=record["id"],
+                field_name="is_called",
+                new_value=record["is_called"]
+            )
+
+            if not success:
+                print("API failed!")
+
         start = time.perf_counter()
 
         record = e.control.data
@@ -276,6 +324,8 @@ class TelesalesApp:
         self.phonebook[src_key].remove(record)
         self.phonebook[dst_key].append(record)
 
+        
+
         # Move UI components
         src_lv.controls.remove(tile)
         dst_lv.controls.append(self.__build_tile(record))
@@ -288,11 +338,75 @@ class TelesalesApp:
         self.show_message(f"Moved to {dst_key.replace('_', ' ').title()}!")
 
         end = time.perf_counter()
+
+        threading.Thread(
+            target=__update_call_status,
+            args=(record,)
+        ).start()
+
+        print(f"Elapsed time: {end - start:.6f} seconds")
+
+    def __cancel_number(self, e):
+        def on_cancel(record):
+            success = self.client.update_field(
+                model="sale.phonebook",
+                record_id=record["id"],
+                field_name="unreachable",
+                new_value=record["unreachable"]
+            )
+
+            if not success:
+                print("API failed!")
+
+        start = time.perf_counter()
+
+        record = e.control.data
+        # Determine direction based on current status
+        unreachable = record.get("unreachable")
+        
+        # Define source/destination ListViews
+        src_lv = self.called_lv
+        dst_lv = self.unreachable_lv
+
+        # 🔹 Find ListTile container
+        tile = e.control
+        while tile and not isinstance(tile, ft.ListTile):
+            tile = tile.parent
+        if not tile: return
+
+        # Update Data state
+        record["unreachable"] = not unreachable
+        self.phonebook['called'].remove(record)
+        self.phonebook['unreachable'].append(record)
+
+        tile.trailing.controls = []
+        tile.on_click = None
+
+        # Move UI components
+        src_lv.controls.remove(tile)
+        dst_lv.controls.append(tile) # No need function
+
+        # Refresh UI
+        src_lv.update()
+        dst_lv.update()
+
+        print("X")
+        self.refresh_counters()
+        
+        self.show_message(f"Canceled!")
+
+        end = time.perf_counter()
+
+        threading.Thread(
+            target=on_cancel,
+            args=(record,)
+        ).start()
+
         print(f"Elapsed time: {end - start:.6f} seconds")
 
 
     async def __on_exit(self, page : ft.Page, backroute):
-        self.phonebook = []
+        #self.phonebook = []
         self.is_editing = False
         self.is_syncing = False
 
@@ -302,14 +416,9 @@ class TelesalesApp:
         await self.url_launcher.launch_url(f"tel:{phone_number}", )
 
     async def fetch_data(self, e):
-        # 1. Prevent concurrent runs
-        if self.sync_button.disabled:
-            return
+        start = time.time()
 
-        # 2. UI Feedback: Disable button and show loading state
-        self.sync_button.disabled = True
-        self.sync_button.icon = ft.Icons.HOURGLASS_EMPTY
-
+        # 1. Prevent concurrent runs    
         if not self.client:
             self.show_message("No client!", is_error=True)
             return
@@ -318,28 +427,34 @@ class TelesalesApp:
             self.show_message("Đang đồng bộ, vui lòng chờ!")
             return
 
-        self.is_syncing = True
+        # 2. UI Feedback: Disable button and show loading state
         self.sync_button.disabled = True
+        self.sync_button.icon = ft.Icons.HOURGLASS_EMPTY
+        self.sync_button.update()
+
+        
+        self.is_syncing = True
 
         try:
+            required_fields = ['customer_id', 'phone_number', 'is_called', 'unreachable', 'note']
             called_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
-                [("is_called", "=", True)],
-                ['customer_id', 'phone_number', 'is_called', 'note']
+                [("is_called", "=", True), ("unreachable", "=", False)],
+                required_fields
             )
 
             not_called_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
                 [("is_called", "=", False)],
-                ['customer_id', 'phone_number', 'is_called', 'note']
+                required_fields
             )
 
             # 2. Run them concurrently
             # This returns a list containing the results of both calls in order
-            self.phonebook['called'], self.phonebook['not_called'] = await asyncio.gather(
-                called_task, 
+            self.phonebook['called'], self.phonebook['not_called']= await asyncio.gather(
+                called_task,
                 not_called_task
             )
 
@@ -355,9 +470,9 @@ class TelesalesApp:
             self.show_message(f"Lỗi: {str(err)}", is_error=True)
 
         finally:
-            # ✅ always restore state
             self.is_syncing = False
             self.sync_button.disabled = False
             self.sync_button.icon = ft.Icons.REFRESH
             self.sync_button.update()
-            self.page.update()
+            self.called_lv.update()
+            self.not_called_lv.update()
