@@ -7,6 +7,7 @@ from login_view import LoginView
 routes = {
     'login': '/login',
     'home': '/home',
+    'settings': '/settings',
     'dashboard': '/dashboard',
     'settings': '/settings',
     'marketing': '/dashboard/marketing',
@@ -76,13 +77,13 @@ async def main(page: ft.Page):
 
     # --- VIEW GENERATORS (Clean tracking) ---
 
-    def home_view():
+    def settings_view():
         return ft.View(
             route=routes["home"],
             navigation_bar=get_nav_bar(),
             controls=[
-                ft.AppBar(title=ft.Text("Trang Chủ"), bgcolor=ft.Colors.PRIMARY),
-                ft.Text("Welcome to HT Land", size=20)
+                ft.AppBar(title=ft.Text("Settings"), bgcolor=ft.Colors.PRIMARY),
+                ft.Text("Hello!")
             ]
         )
 
@@ -92,15 +93,23 @@ async def main(page: ft.Page):
             navigation_bar=get_nav_bar(),
             controls=[
                 ft.AppBar(title=ft.Text("Dashboard"), bgcolor=ft.Colors.PRIMARY),
-                ft.Row([
-                    box("Nhân Sự", ft.Icons.GROUP),
-                    box("Khách Hàng", ft.Icons.PERSON_OUTLINE),
-                ], alignment="center"),
-                ft.Row([
-                    box("Dự Án", ft.Icons.HOUSE),
-                    box("Marketing", ft.Icons.CAMPAIGN, 
-                        on_click=lambda _: asyncio.create_task(page.push_route(routes["marketing"]))),
-                ], alignment="center"),
+
+                ft.Container(
+                    content=ft.GridView(
+                        runs_count=2,
+                        max_extent=200,
+                        spacing=20,
+                        run_spacing=20,
+                        controls=[
+                            box("Nhân Sự", ft.Icons.GROUP),
+                            box("Khách Hàng", ft.Icons.PERSON_OUTLINE),
+                            box("Dự Án", ft.Icons.HOUSE),
+                            box("Marketing", ft.Icons.CAMPAIGN,
+                                on_click=lambda _: asyncio.create_task(page.push_route(routes["marketing"]))),
+                        ],
+                    ),
+                    padding=20
+                )
             ]
         )
 
@@ -120,27 +129,33 @@ async def main(page: ft.Page):
                             ),
                     bgcolor=ft.Colors.PRIMARY,
                 ),
-                ft.Row([
-                        box("Telesales", ft.Icons.PHONE, 
-                            on_click=lambda _: asyncio.create_task(page.push_route(routes["telesales"]))),
-                        box("Mailing", ft.Icons.MAIL),
-                        box("Posting", ft.Icons.POST_ADD)
-                    ], 
-                    alignment="center",
-                    wrap=True
-                )
+                ft.Container(
+                    content=ft.GridView(
+                        runs_count=2,
+                        max_extent=200,
+                        spacing=20,
+                        run_spacing=20,
+                        controls=[
+                            box("Telesales", ft.Icons.PHONE, 
+                                on_click=lambda _: asyncio.create_task(page.push_route(routes["telesales"]))),
+                            box("Mailing", ft.Icons.MAIL),
+                            box("Posting", ft.Icons.POST_ADD)
+                        ]
+                    ),
+                    padding=20
+                )              
             ]
         )
 
     # --- ROUTING ENGINE ---
-    def route_change(route):
+    def route_change():
         page.views.clear()
 
         # 🔹 1. LOGIN VIEW
         # We check if the user is on the login route
         if page.route == routes["login"]:
             login_screen = login_view.get_view(page)
-            # Optional: Hide nav bar on login screen by NOT adding it here
+            
             page.views.append(login_screen)
 
         # 🔹 2. DASHBOARD VIEW
@@ -161,9 +176,12 @@ async def main(page: ft.Page):
             
             page.views.append(ts_view)
         
-        # 🔹 5. SETTINGS VIEW
-        # elif page.route == routes["settings"]:
-        #     page.views.append(settings_view())
+        #🔹 5. SETTINGS VIEW
+        elif page.route == routes["settings"]:
+            page.views.append(settings_view())
+            #🔹 5. SETTINGS VIEW
+        elif page.route == routes["home"]:
+            page.views.append(settings_view())
 
         page.update()
 
@@ -175,6 +193,7 @@ async def main(page: ft.Page):
     page.on_route_change = route_change
     page.on_view_pop = view_pop
     
+    ts_view = sales_phone.get_view(page, routes["marketing"])
     # Start the app
     await page.push_route('/login')
 

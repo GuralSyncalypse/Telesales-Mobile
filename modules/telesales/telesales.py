@@ -1,6 +1,7 @@
 import flet as ft
 import asyncio
 import threading
+import regex as re
 from functools import partial
 import time
 
@@ -11,6 +12,12 @@ class TelesalesApp:
         self.is_syncing = False
         self.is_editing = False
 
+        self.search_bar = ft.TextField(
+            label="Search contacts",
+            prefix_icon=ft.Icons.SEARCH,
+            expand=True,
+            on_change=lambda e: self.render_lists(e.control.value),
+        )
         self.not_called_lv = None
         self.called_lv = None
         self.unreachable_lv = None
@@ -22,19 +29,77 @@ class TelesalesApp:
             'unreachable': []
         }
 
-    def refresh_counters(self):
-        # 1. Update the Data Counts
-        not_called_count = len(self.phonebook['not_called'])
-        called_count = len(self.phonebook['called'])
-        unreachable = len(self.phonebook['unreachable'])
+    def render_lists(self, query: str):
+        query = query.lower()
+        
+        # Create a regex pattern: 
+        # ^ matches start of string
+        # | is 'OR'
+        # •\s+ matches the dot separator and the space
+        # re.escape ensures dots/pluses in query don't break regex
+        pattern = rf"(^|•\s+){re.escape(query)}"
 
-        # 2. Update the actual Tab objects
-        self.tabs.content.controls[0].tabs[0].label = f"Chưa gọi ({not_called_count})"
-        self.tabs.content.controls[0].tabs[1].label = f"Đã gọi ({called_count})"
-        self.tabs.content.controls[0].tabs[2].label = f"Không gọi được ({unreachable})"
+        # Clear lists
+        self.called_lv.controls.clear()
+        self.not_called_lv.controls.clear()
+        self.unreachable_lv.controls.clear()
 
-        for i in range(0, 3):
-            self.tabs.content.controls[0].tabs[i].update()
+        # Define a helper to check matches to avoid repeating code
+        def matches_query(item):
+            text = f"{item['customer_id'][1]} • {item['phone_number']}".lower()
+            return re.search(pattern, text) is not None
+
+        # Filter called
+        for item in self.phonebook['called']:
+            if matches_query(item):
+                self.called_lv.controls.append(self.__build_tile(item))
+
+        # Filter not_called
+        for item in self.phonebook['not_called']:
+            if matches_query(item):
+                self.not_called_lv.controls.append(self.__build_tile(item))
+
+        # Filter unreachable
+        for item in self.phonebook['unreachable']:
+            if matches_query(item):
+                self.unreachable_lv.controls.append(self.__build_tile(item))
+
+        self.refresh_counters(use_ui_counts=True)
+        self.not_called_lv.update()
+        self.called_lv.update()
+        self.unreachable_lv.update()
+
+    def refresh_counters(self, use_ui_counts=False):
+        """
+        Updates tab labels. 
+        If use_ui_counts is True, it counts active UI widgets.
+        Otherwise, it counts items in the phonebook data.
+        """
+        if use_ui_counts:
+            counts = {
+                "not_called": len(self.not_called_lv.controls),
+                "called": len(self.called_lv.controls),
+                "unreachable": len(self.unreachable_lv.controls)
+            }
+        else:
+            counts = {
+                "not_called": len(self.phonebook['not_called']),
+                "called": len(self.phonebook['called']),
+                "unreachable": len(self.phonebook['unreachable'])
+            }
+
+        # Labels configuration to avoid repeating index logic
+        labels = [
+            f"Chưa gọi ({counts['not_called']})",
+            f"Đã gọi ({counts['called']})",
+            f"Không gọi được ({counts['unreachable']})"
+        ]
+
+        # Update the actual Tab objects
+        tabs_list = self.tabs.content.controls[0].tabs
+        for i, label in enumerate(labels):
+            tabs_list[i].label = label
+            tabs_list[i].update()
 
     def __build_tabs(self):
         if not self.not_called_lv:
@@ -166,7 +231,7 @@ class TelesalesApp:
 
         self.data_view = ft.Column([
             ft.Row([
-                ft.Text("Danh sách SĐT", size=20, weight=ft.FontWeight.W_500),
+                self.search_bar,
                 self.sync_button
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.tabs
@@ -205,7 +270,6 @@ class TelesalesApp:
         Handles the UI transition and logic for editing a note within a ListView.
         """
         def update_note(record):
-            print("UPDATE")
             success = self.client.update_field(
                 model="sale.phonebook",
                 record_id=record["id"],
@@ -253,7 +317,7 @@ class TelesalesApp:
                     args=(record,)
                 ).start()
 
-                original_tile.subtitle = ft.Text(f"Note: {record["note"] or 'No notes'}")
+                original_tile.subtitle = ft.Text(f"Note: {record["note"] or 'No notes'}", italic=True)
                 self.show_message("Note updated!")
                 restore_ui()
 
@@ -321,7 +385,6 @@ class TelesalesApp:
         self.phonebook[dst_key].append(record)
 
         
-
         # Move UI components
         src_lv.controls.remove(tile)
         dst_lv.controls.append(self.__build_tile(record))
@@ -329,7 +392,7 @@ class TelesalesApp:
         # Refresh UI
         src_lv.update()
         dst_lv.update()
-        self.refresh_counters()
+        self.refresh_counters(use_ui_counts=True)
         
         self.show_message(f"Moved to {dst_key.replace('_', ' ').title()}!")
 
@@ -386,7 +449,7 @@ class TelesalesApp:
         src_lv.update()
         dst_lv.update()
 
-        self.refresh_counters()
+        self.refresh_counters(use_ui_counts=True)
         
         self.show_message(f"Canceled!")
 
@@ -399,12 +462,14 @@ class TelesalesApp:
 
         print(f"Elapsed time: {end - start:.6f} seconds")
 
-
     async def __on_exit(self, page : ft.Page, backroute):
-        #self.phonebook = []
+        self.phonebook = {}
+        self.called_lv.controls.clear()
+        self.not_called_lv.controls.clear()
+        self.unreachable_lv.controls.clear()
         self.is_editing = False
         self.is_syncing = False
-
+    
         await page.push_route(backroute)
 
     async def make_call(self, e, phone_number):

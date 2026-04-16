@@ -55,30 +55,36 @@ class LoginView:
         return ft.View(
             route="/",
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            vertical_alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.MainAxisAlignment.START,
             controls=[
-                ft.Container(
-                    width=350,
-                    padding=30,
-                    bgcolor=ft.Colors.SURFACE_BRIGHT,
-                    border_radius=20,
-                    content=ft.Column(
-                        [
-                            self.logo,
-                            ft.Divider(height=10, color="transparent"),
-
-                            self.domain_input,
-                            self.https_checkbox,
-                            self.db_input,
-                            self.user_input,
-                            self.password_input,
-
-                            ft.Divider(height=20, color="transparent"),
-                            self.login_button                        
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=10,
-                    )
+                ft.Column(
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Container(
+                            width=350,
+                            padding=30,
+                            bgcolor=ft.Colors.SURFACE_BRIGHT,
+                            border_radius=20,
+                            content=ft.Column(
+                                [
+                                    self.logo,
+                                    ft.Divider(height=10, color="transparent"),
+                                    self.domain_input,
+                                    self.https_checkbox,
+                                    self.db_input,
+                                    self.user_input,
+                                    self.password_input,
+                                    ft.Divider(height=20, color="transparent"),
+                                    self.login_button
+                                ],
+                                spacing=10,
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            )
+                        )
+                    ]
                 )
             ]
         )
@@ -101,7 +107,7 @@ class LoginView:
 
         client = OdooAPI(
             base_url=base_url,
-            db="Odoo",
+            db=self.db_input.value,
             username=self.user_input.value,
             password=self.password_input.value             
         )
@@ -111,13 +117,8 @@ class LoginView:
 
 
         if success:
-            # ✅ correct navigation
-            start = time.perf_counter()
             self.show_message(page, "Đăng nhập thành công.")
-            await page.push_route("/dashboard")
-            end = time.perf_counter()            
-            print(f"Time taken: {end - start:.6f} seconds")
-
+            await page.push_route("/dashboard")         
         else:
             self.show_message(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông thin.", True)
             page.update()
