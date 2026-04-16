@@ -160,11 +160,6 @@ class TelesalesApp:
         self.url_launcher = ft.UrlLauncher()
     
         self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=self.fetch_data)
-        # self.save_button = ft.IconButton(
-        #     icon=ft.Icons.SAVE,
-        #     tooltip="Save changes",
-        #     on_click=self.save_data
-        # )
 
 
         self.tabs = self.__build_tabs()
@@ -210,6 +205,7 @@ class TelesalesApp:
         Handles the UI transition and logic for editing a note within a ListView.
         """
         def update_note(record):
+            print("UPDATE")
             success = self.client.update_field(
                 model="sale.phonebook",
                 record_id=record["id"],
@@ -248,10 +244,9 @@ class TelesalesApp:
         def handle_save(ev):
             save_btn.disabled = True
             note_field.disabled = True
-            parent.update()
 
             try:
-                record["note"] = note_field.value.strip()
+                record["note"] = note_field.value
 
                 threading.Thread(
                     target=update_note,
@@ -274,11 +269,12 @@ class TelesalesApp:
             label="Edit Note",
             multiline=True,
             expand=True,
-            autofocus=True,
-            on_change=lambda _: setattr(save_btn, "disabled", note_field.value == (record.get("note") or "")) or parent.update()
+            min_lines=1,    # Shows 3 lines of space immediately
+            max_lines=3,   # Stops growing after 10 lines
+            autofocus=True
         )
 
-        save_btn = ft.IconButton(icon=ft.Icons.SAVE, tooltip="Save", disabled=True, on_click=handle_save)
+        save_btn = ft.IconButton(icon=ft.Icons.SAVE, tooltip="Save", disabled=False, on_click=handle_save)
         cancel_btn = ft.IconButton(icon=ft.Icons.CANCEL, tooltip="Cancel", on_click=lambda _: restore_ui())
 
         # 4. UI Swap
@@ -390,7 +386,6 @@ class TelesalesApp:
         src_lv.update()
         dst_lv.update()
 
-        print("X")
         self.refresh_counters()
         
         self.show_message(f"Canceled!")

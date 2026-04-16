@@ -53,7 +53,7 @@ class LoginView:
         self.login_button.on_click = lambda e: asyncio.create_task(self.handle_login(page))
 
         return ft.View(
-            route="/login",
+            route="/",
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             vertical_alignment=ft.MainAxisAlignment.CENTER,
             controls=[
