@@ -168,9 +168,9 @@ async def main(page: ft.Page):
 
         # 🔹 4. TELESALES VIEW (External Module)
         elif page.route == routes["telesales"]:
-            # Get the view from your sales_phone instance
+            # Get the view from your sales_phone instance            
             ts_view = sales_phone.get_view(page, routes["marketing"])
-            
+
             # Inject the Navigation Bar so it appears here too
             ts_view.navigation_bar = get_nav_bar() 
             

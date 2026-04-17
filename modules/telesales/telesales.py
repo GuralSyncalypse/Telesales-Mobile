@@ -1,6 +1,7 @@
 import flet as ft
 import asyncio
 import threading
+import math
 import regex as re
 from functools import partial
 import time
@@ -9,6 +10,16 @@ class TelesalesApp:
     protocol = 'https'
 
     def __init__(self):
+        # Số phần tử trong 1 trang.
+        self.items_per_page = 20
+
+        self.page_info = ft.Text(size=16, weight=ft.FontWeight.BOLD)
+        self.prev_btn = ft.Button("Previous", on_click=self.prev_page)
+        self.next_btn = ft.Button("Next", on_click=self.next_page)
+        self.list_in_use = 0
+        self.current_page = 1
+        self.is_paginating = False
+
         self.is_syncing = False
         self.is_editing = False
 
@@ -16,12 +27,13 @@ class TelesalesApp:
             label="Search contacts",
             prefix_icon=ft.Icons.SEARCH,
             expand=True,
-            on_change=lambda e: self.render_lists(e.control.value),
+            on_change=lambda e: self.__on_search(e.control.value),
         )
         self.not_called_lv = None
         self.called_lv = None
         self.unreachable_lv = None
         
+        self.filtered = []
         self.client = None
         self.phonebook = {
             'called': [],
@@ -29,46 +41,131 @@ class TelesalesApp:
             'unreachable': []
         }
 
-    def render_lists(self, query: str):
-        query = query.lower()
+    def __get_list_in_use(self):
+        lists = [
+            self.not_called_lv,
+            self.called_lv,
+            self.unreachable_lv
+        ]
+        return lists[self.list_in_use]
+
+    def __get_data_source(self):
+        source = [
+            self.phonebook['not_called'],
+            self.phonebook['called'],
+            self.phonebook['unreachable']
+        ]
+        return source[self.list_in_use]
+
+    def update_list(self):
+        lv = self.__get_list_in_use()
+
+        lv.controls.clear()
+
+        total_filtered = len(self.filtered)
+        total_pages = max(1, math.ceil(total_filtered / self.items_per_page))
+
+        # Clamp current page (important after search)
+        self.current_page = max(1, min(self.current_page, total_pages))
+
+        start = (self.current_page - 1) * self.items_per_page
+        end = start + self.items_per_page
+
+        items = [
+            self.__build_tile(item)
+            for item in self.filtered[start:end]
+        ]
+
+        lv.controls = items        
+
+        # Show "no results"
+        if total_filtered == 0:
+            lv.controls.append(ft.Text("No results found"))
+
+        # Update pagination info
+        self.page_info.value = f"Page {self.current_page} of {total_pages}"
+        print(self.page_info.value)
+        self.prev_btn.disabled = (self.current_page == 1)
+        self.next_btn.disabled = (self.current_page == total_pages)
+
+        self.refresh_counters(use_ui_counts=True)
         
+        self.page_info.update()
+        lv.update()       
+
+    def next_page(self, e):
+        if self.is_paginating:
+            return
+
+        self.is_paginating = True
+        btn = e.control
+        btn.disabled = True
+        btn.update()
+
+        start = time.perf_counter()
+
+        try:
+            self.current_page += 1
+            self.update_list()
+        finally:
+            self.is_paginating = False
+            btn.update()
+
+        end = time.perf_counter()
+        print(f"next_page took {end - start:.6f} seconds")
+
+
+    def prev_page(self, e):
+        if self.is_paginating:
+            return
+
+        self.is_paginating = True
+        btn = e.control
+        btn.disabled = True
+        btn.update()
+
+        start = time.perf_counter()
+
+        try:
+            self.current_page -= 1
+            self.update_list()
+        finally:
+            self.is_paginating = False
+            btn.update()
+
+        end = time.perf_counter()
+        print(f"next_page took {end - start:.6f} seconds")
+
+    def __on_search(self, query: str):
+        # Define a helper to check matches to avoid repeating code
+        def matches_query(item):
+            text = f"{item['customer_id'][1]} • {item['phone_number']}".lower()
+            return re.search(pattern, text) is not None
+
+        query = query.lower()
+        self.filtered = []
+        source = self.__get_data_source()
+
         # Create a regex pattern: 
         # ^ matches start of string
         # | is 'OR'
         # •\s+ matches the dot separator and the space
         # re.escape ensures dots/pluses in query don't break regex
         pattern = rf"(^|•\s+){re.escape(query)}"
-
-        # Clear lists
-        self.called_lv.controls.clear()
-        self.not_called_lv.controls.clear()
-        self.unreachable_lv.controls.clear()
-
-        # Define a helper to check matches to avoid repeating code
-        def matches_query(item):
-            text = f"{item['customer_id'][1]} • {item['phone_number']}".lower()
-            return re.search(pattern, text) is not None
-
-        # Filter called
-        for item in self.phonebook['called']:
-            if matches_query(item):
-                self.called_lv.controls.append(self.__build_tile(item))
-
-        # Filter not_called
-        for item in self.phonebook['not_called']:
-            if matches_query(item):
-                self.not_called_lv.controls.append(self.__build_tile(item))
-
-        # Filter unreachable
-        for item in self.phonebook['unreachable']:
-            if matches_query(item):
-                self.unreachable_lv.controls.append(self.__build_tile(item))
-
-        self.refresh_counters(use_ui_counts=True)
-        self.not_called_lv.update()
-        self.called_lv.update()
-        self.unreachable_lv.update()
-
+        
+        
+        # Filters
+        if query == "":
+            self.filtered = source
+        else:
+            self.filtered = [
+                item for item in source
+                if matches_query(item)
+            ]
+        
+        self.current_page = 1
+        self.update_list()
+          
     def refresh_counters(self, use_ui_counts=False):
         """
         Updates tab labels. 
@@ -87,7 +184,7 @@ class TelesalesApp:
                 "called": len(self.phonebook['called']),
                 "unreachable": len(self.phonebook['unreachable'])
             }
-
+        
         # Labels configuration to avoid repeating index logic
         labels = [
             f"Chưa gọi ({counts['not_called']})",
@@ -100,6 +197,11 @@ class TelesalesApp:
         for i, label in enumerate(labels):
             tabs_list[i].label = label
             tabs_list[i].update()
+
+    def on_tab_change(self, e):
+        self.list_in_use = e.control.selected_index
+        self.filtered = self.__get_data_source().copy()
+        self.update_list()
 
     def __build_tabs(self):
         if not self.not_called_lv:
@@ -122,6 +224,8 @@ class TelesalesApp:
             )
             
         tabs = ft.Tabs(
+            selected_index=0,
+            on_change=self.on_tab_change,
             length=3,
             expand=True,
             content=ft.Column(
@@ -154,6 +258,7 @@ class TelesalesApp:
 
         phone = record.get("phone_number", "No Phone")
         is_called = record.get("is_called")
+        unreachable = record.get("unreachable")
 
         
         call_btn = ft.IconButton(
@@ -181,6 +286,9 @@ class TelesalesApp:
                     on_click=self.__cancel_number
                 )
             )
+        
+        if unreachable:
+            buttons = []
 
         return ft.ListTile(
             leading = ft.Icon(
@@ -212,12 +320,13 @@ class TelesalesApp:
     def show_message(self, text, is_error=False):
         self.page.snack_bar = ft.SnackBar(
             content=ft.Text(text),
-            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400
+            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400,
+            duration=1500,
+            behavior=ft.SnackBarBehavior.FLOATING
         )
         self.page.show_dialog(self.page.snack_bar) 
 
     def get_view(self, page: ft.Page, back_route="/"):
-        # Page
         self.page = page
         self.client = page.session.store.get("client")
 
@@ -225,7 +334,6 @@ class TelesalesApp:
         self.url_launcher = ft.UrlLauncher()
     
         self.sync_button = ft.IconButton(icon=ft.Icons.REFRESH, on_click=self.fetch_data)
-
 
         self.tabs = self.__build_tabs()
 
@@ -236,6 +344,8 @@ class TelesalesApp:
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.tabs
         ], expand=True, visible=True)
+
+        asyncio.create_task(self.fetch_data())
 
         return ft.View(
             route=f"/dashboard/marketing/telesales",
@@ -260,6 +370,11 @@ class TelesalesApp:
                     ],
                     expand=True,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Row(
+                    [self.prev_btn, self.page_info, self.next_btn],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=20
                 )
             ],
         )
@@ -347,7 +462,6 @@ class TelesalesApp:
            
 
     def __toggle_call_status(self, e):
-        """Toggles a record between 'Called' and 'Not Called' states"""
         def __update_call_status(record):
             success = self.client.update_field(
                 model="sale.phonebook",
@@ -368,10 +482,6 @@ class TelesalesApp:
         # Define source/destination keys
         src_key = 'called' if is_called else 'not_called'
         dst_key = 'not_called' if is_called else 'called'
-        
-        # Define source/destination ListViews
-        src_lv = self.called_lv if is_called else self.not_called_lv
-        dst_lv = self.not_called_lv if is_called else self.called_lv
 
         # 🔹 Find ListTile container
         tile = e.control
@@ -384,15 +494,10 @@ class TelesalesApp:
         self.phonebook[src_key].remove(record)
         self.phonebook[dst_key].append(record)
 
-        
-        # Move UI components
-        src_lv.controls.remove(tile)
-        dst_lv.controls.append(self.__build_tile(record))
 
         # Refresh UI
-        src_lv.update()
-        dst_lv.update()
-        self.refresh_counters(use_ui_counts=True)
+        self.filtered = self.__get_data_source().copy()
+        self.update_list()
         
         self.show_message(f"Moved to {dst_key.replace('_', ' ').title()}!")
 
@@ -417,15 +522,22 @@ class TelesalesApp:
             if not success:
                 print("API failed!")
 
-        start = time.perf_counter()
+        def undo(ev):
+            record["unreachable"] = prev_unreachable
 
+            # Move lại list cũ
+            if record in self.phonebook['unreachable']:
+                self.phonebook['unreachable'].remove(record)
+                self.phonebook['is_called'].append(record)
+
+            self.update_list()
+
+        start = time.perf_counter()
+    
         record = e.control.data
         # Determine direction based on current status
+        prev_unreachable = record.get("unreachable")
         unreachable = record.get("unreachable")
-        
-        # Define source/destination ListViews
-        src_lv = self.called_lv
-        dst_lv = self.unreachable_lv
 
         # 🔹 Find ListTile container
         tile = e.control
@@ -441,15 +553,9 @@ class TelesalesApp:
         tile.trailing.controls = []
         tile.on_click = None
 
-        # Move UI components
-        src_lv.controls.remove(tile)
-        dst_lv.controls.append(tile) # No need function
-
         # Refresh UI
-        src_lv.update()
-        dst_lv.update()
-
-        self.refresh_counters(use_ui_counts=True)
+        self.filtered = self.__get_data_source().copy()
+        self.update_list()
         
         self.show_message(f"Canceled!")
 
@@ -463,7 +569,12 @@ class TelesalesApp:
         print(f"Elapsed time: {end - start:.6f} seconds")
 
     async def __on_exit(self, page : ft.Page, backroute):
-        self.phonebook = {}
+        self.phonebook = {
+            'called': [],
+            'not_called': [],
+            'unreachable': []
+        }
+
         self.called_lv.controls.clear()
         self.not_called_lv.controls.clear()
         self.unreachable_lv.controls.clear()
@@ -475,7 +586,23 @@ class TelesalesApp:
     async def make_call(self, e, phone_number):
         await self.url_launcher.launch_url(f"tel:{phone_number}", )
 
-    async def fetch_data(self, e):
+    def _get_phonebook_task(self, domain):
+        required_fields = [
+            'customer_id',
+            'phone_number',
+            'is_called',
+            'unreachable',
+            'note'
+        ]
+
+        return asyncio.to_thread(
+            self.client.get_table,
+            "sale.phonebook",
+            domain,
+            required_fields
+        )
+
+    async def fetch_data(self, e=None):
         start = time.time()
 
         # 1. Prevent concurrent runs    
@@ -491,7 +618,6 @@ class TelesalesApp:
         self.sync_button.disabled = True
         self.sync_button.icon = ft.Icons.HOURGLASS_EMPTY
         self.sync_button.update()
-
         
         self.is_syncing = True
 
@@ -516,14 +642,10 @@ class TelesalesApp:
             self.phonebook['called'], self.phonebook['not_called']= await asyncio.gather(
                 called_task,
                 not_called_task
-            )
+            )   
 
-            self.refresh_counters()
-
-            # Temporary solution
-            self.called_lv.controls = [self.__build_tile(r) for r in self.phonebook['called']]
-            self.not_called_lv.controls = [self.__build_tile(r) for r in self.phonebook['not_called']]
-
+            self.filtered = self.__get_data_source().copy()
+            self.update_list()     
             self.show_message("Synced!")
 
         except Exception as err:
@@ -534,5 +656,3 @@ class TelesalesApp:
             self.sync_button.disabled = False
             self.sync_button.icon = ft.Icons.REFRESH
             self.sync_button.update()
-            self.called_lv.update()
-            self.not_called_lv.update()
