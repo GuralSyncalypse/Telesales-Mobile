@@ -1,6 +1,7 @@
 import asyncio
 import flet as ft
 from modules.telesales import telesales
+from modules.qlkh import CustomerApp
 from login_view import LoginView
 
 # 1. Configuration & Routes
@@ -9,7 +10,7 @@ routes = {
     'home': '/home',
     'settings': '/settings',
     'dashboard': '/dashboard',
-    'settings': '/settings',
+    'KH': '/dashboard/KH',
     'marketing': '/dashboard/marketing',
     'telesales': '/dashboard/marketing/telesales'
 }
@@ -102,7 +103,7 @@ async def main(page: ft.Page):
                         run_spacing=20,
                         controls=[
                             box("Nhân Sự", ft.Icons.GROUP),
-                            box("Khách Hàng", ft.Icons.PERSON_OUTLINE),
+                            box("Khách Hàng", ft.Icons.PERSON_OUTLINE, on_click=lambda _: asyncio.create_task(page.push_route(routes["KH"]))),
                             box("Dự Án", ft.Icons.HOUSE),
                             box("Marketing", ft.Icons.CAMPAIGN,
                                 on_click=lambda _: asyncio.create_task(page.push_route(routes["marketing"]))),
@@ -161,6 +162,15 @@ async def main(page: ft.Page):
         # 🔹 2. DASHBOARD VIEW
         elif page.route == routes["dashboard"]:
             page.views.append(dashboard_view())
+        
+        elif page.route == routes["KH"]:
+            # Get the view from your sales_phone instance            
+            kh_view = customers.get_view(page, back_route=routes["dashboard"])
+
+            # Inject the Navigation Bar so it appears here too
+            kh_view.navigation_bar = get_nav_bar() 
+            
+            page.views.append(kh_view)
 
         # 🔹 3. MARKETING VIEW
         elif page.route == routes["marketing"]:
@@ -169,7 +179,7 @@ async def main(page: ft.Page):
         # 🔹 4. TELESALES VIEW (External Module)
         elif page.route == routes["telesales"]:
             # Get the view from your sales_phone instance            
-            ts_view = sales_phone.get_view(page, routes["marketing"])
+            ts_view = sales_phone.get_view(page, back_route=routes["marketing"])
 
             # Inject the Navigation Bar so it appears here too
             ts_view.navigation_bar = get_nav_bar() 
@@ -199,5 +209,6 @@ async def main(page: ft.Page):
 
 login_view = LoginView()
 sales_phone = telesales.TelesalesApp()
+customers = CustomerApp()
 if __name__ == "__main__":
     ft.run(main)

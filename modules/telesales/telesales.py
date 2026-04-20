@@ -84,7 +84,7 @@ class TelesalesApp:
 
         # Update pagination info
         self.page_info.value = f"Page {self.current_page} of {total_pages}"
-        print(self.page_info.value)
+
         self.prev_btn.disabled = (self.current_page == 1)
         self.next_btn.disabled = (self.current_page == total_pages)
 
@@ -139,7 +139,7 @@ class TelesalesApp:
     def __on_search(self, query: str):
         # Define a helper to check matches to avoid repeating code
         def matches_query(item):
-            text = f"{item['customer_id'][1]} • {item['phone_number']}".lower()
+            text = f"{item['customer_id'][1]} • {item['phone']}".lower()
             return re.search(pattern, text) is not None
 
         query = query.lower()
@@ -256,7 +256,7 @@ class TelesalesApp:
         customer_data = record.get("customer_id")
         name = customer_data[1] if isinstance(customer_data, (list, tuple)) else "Unknown Customer"
 
-        phone = record.get("phone_number", "No Phone")
+        phone = record.get("phone", "No Phone")
         is_called = record.get("is_called")
         unreachable = record.get("unreachable")
 
@@ -265,7 +265,7 @@ class TelesalesApp:
             icon=ft.Icons.PHONE,
             icon_color=ft.Colors.GREEN, # Use ft.Colors for better IDE intellisense
             tooltip="Call Customer",
-            on_click=partial(self.make_call, phone_number=phone)
+            on_click=partial(self.make_call, phone=phone)
         ) 
 
         switch_btn = ft.IconButton(
@@ -583,13 +583,13 @@ class TelesalesApp:
     
         await page.push_route(backroute)
 
-    async def make_call(self, e, phone_number):
-        await self.url_launcher.launch_url(f"tel:{phone_number}", )
+    async def make_call(self, e, phone):
+        await self.url_launcher.launch_url(f"tel:{phone}", )
 
     def _get_phonebook_task(self, domain):
         required_fields = [
             'customer_id',
-            'phone_number',
+            'phone',
             'is_called',
             'unreachable',
             'note'
@@ -622,7 +622,7 @@ class TelesalesApp:
         self.is_syncing = True
 
         try:
-            required_fields = ['customer_id', 'phone_number', 'is_called', 'unreachable', 'note']
+            required_fields = ['customer_id', 'phone', 'is_called', 'unreachable', 'note']
             called_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
