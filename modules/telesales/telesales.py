@@ -7,8 +7,6 @@ from functools import partial
 import time
 
 class TelesalesApp:
-    protocol = 'https'
-
     def __init__(self):
         # Số phần tử trong 1 trang.
         self.items_per_page = 20
@@ -345,8 +343,6 @@ class TelesalesApp:
             self.tabs
         ], expand=True, visible=True)
 
-        asyncio.create_task(self.fetch_data())
-
         return ft.View(
             route=f"/dashboard/marketing/telesales",
             controls=[
@@ -603,6 +599,9 @@ class TelesalesApp:
         )
 
     async def fetch_data(self, e=None):
+        if getattr(self, "_loading", False):
+            return
+
         start = time.time()
 
         # 1. Prevent concurrent runs    
@@ -620,7 +619,7 @@ class TelesalesApp:
         self.sync_button.update()
         
         self.is_syncing = True
-
+        self._loading = True
         try:
             required_fields = ['customer_id', 'phone', 'is_called', 'unreachable', 'note']
             called_task = asyncio.to_thread(

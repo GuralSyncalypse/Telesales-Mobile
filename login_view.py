@@ -40,12 +40,12 @@ class LoginView:
 
         self.login_button = ft.Button(
             content="Login to HT",
-            icon=ft.Icons.LOGIN,   # 👈 add icon
-            width=350,
+            icon=ft.Icons.LOGIN,
             height=50,
+            expand=True,
             style=ft.ButtonStyle(
-                shape=ft.RoundedRectangleBorder(radius=12),  # rounded corners
-                text_style=ft.TextStyle(size=16, weight="bold"),
+                shape=ft.RoundedRectangleBorder(radius=12),
+                text_style=ft.TextStyle(size=16, weight=ft.FontWeight.BOLD),
             )
         )
 
@@ -53,14 +53,13 @@ class LoginView:
         self.login_button.on_click = lambda e: asyncio.create_task(self.handle_login(page))
 
         return ft.View(
-            route="/",
+            route="/login",
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            vertical_alignment=ft.MainAxisAlignment.START,
+            vertical_alignment=ft.MainAxisAlignment.CENTER,  # center when possible
             controls=[
                 ft.Column(
-                    scroll=ft.ScrollMode.AUTO,
                     expand=True,
-                    alignment=ft.MainAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.AUTO,  # keep scroll
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Container(
@@ -68,20 +67,22 @@ class LoginView:
                             padding=30,
                             bgcolor=ft.Colors.SURFACE_BRIGHT,
                             border_radius=20,
+                            margin=ft.Margin(20, 40, 20, 40),  # breathing space for scroll
                             content=ft.Column(
-                                [
+                                controls=[
                                     self.logo,
-                                    ft.Divider(height=10, color="transparent"),
+
                                     self.domain_input,
                                     self.https_checkbox,
                                     self.db_input,
+
                                     self.user_input,
                                     self.password_input,
-                                    ft.Divider(height=20, color="transparent"),
-                                    self.login_button
+
+                                    self.login_button,
                                 ],
-                                spacing=10,
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                spacing=15,
+                                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                             )
                         )
                     ]

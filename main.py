@@ -76,15 +76,127 @@ async def main(page: ft.Page):
             shadow=ft.BoxShadow(blur_radius=12, color=ft.Colors.with_opacity(0.1, "black"))
         )
 
+    def logout():
+        page.session.store.set("client", None)
+        asyncio.create_task(page.push_route(routes["login"]))
+
     # --- VIEW GENERATORS (Clean tracking) ---
 
-    def settings_view():
+    def home_view():
         return ft.View(
             route=routes["home"],
             navigation_bar=get_nav_bar(),
             controls=[
-                ft.AppBar(title=ft.Text("Settings"), bgcolor=ft.Colors.PRIMARY),
-                ft.Text("Hello!")
+                ft.AppBar(
+                    title=ft.Text("Home"),
+                    bgcolor=ft.Colors.PRIMARY,
+                ),
+
+                ft.Column(
+                    expand=True,
+                    scroll=ft.ScrollMode.AUTO,
+                    spacing=15,
+                    controls=[
+                        ft.Container(
+                            padding=20,
+                            content=ft.Text(
+                                "Welcome back!",
+                                size=20,
+                                weight=ft.FontWeight.BOLD
+                            )
+                        ),
+
+                        ft.Row(
+                            spacing=10,
+                            controls=[
+                                ft.Card(
+                                    content=ft.Container(
+                                        padding=15,
+                                        width=150,
+                                        content=ft.Column([
+                                            ft.Text("Customers"),
+                                            ft.Text("0", size=18, weight=ft.FontWeight.BOLD)
+                                        ])
+                                    )
+                                ),
+                                ft.Card(
+                                    content=ft.Container(
+                                        padding=15,
+                                        width=150,
+                                        content=ft.Column([
+                                            ft.Text("Projects"),
+                                            ft.Text("0", size=18, weight=ft.FontWeight.BOLD)
+                                        ])
+                                    )
+                                ),
+                            ]
+                        ),
+
+                        ft.Text("Quick Actions", weight=ft.FontWeight.BOLD),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.PERSON_ADD),
+                            title=ft.Text("Add Customer"),
+                        ),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.SEARCH),
+                            title=ft.Text("Search Customers"),
+                        ),
+                    ]
+                )
+            ]
+        )
+
+    def settings_view():
+        return ft.View(
+            route=routes["settings"],
+            navigation_bar=get_nav_bar(),
+            controls=[
+                ft.AppBar(
+                    title=ft.Text("Settings"),
+                    bgcolor=ft.Colors.PRIMARY,
+                ),
+
+                ft.Column(
+                    expand=True,
+                    spacing=10,
+                    scroll=ft.ScrollMode.AUTO,
+                    controls=[
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.PERSON),
+                            title=ft.Text("Account"),
+                            subtitle=ft.Text("Profile, password, personal info"),
+                        ),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.LANGUAGE),
+                            title=ft.Text("Language"),
+                            subtitle=ft.Text("Change app language"),
+                        ),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.SECURITY),
+                            title=ft.Text("Security"),
+                            subtitle=ft.Text("Sessions, devices"),
+                        ),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.SETTINGS),
+                            title=ft.Text("System"),
+                            subtitle=ft.Text("App configuration"),
+                        ),
+
+                        ft.Divider(),
+
+                        ft.ListTile(
+                            leading=ft.Icon(ft.Icons.LOGOUT, color=ft.Colors.RED),
+                            title=ft.Text("Log out", color=ft.Colors.RED),
+                            subtitle=ft.Text("Sign out of your account"),
+                            on_click=logout
+                        )
+                    ]
+                )
             ]
         )
 
@@ -163,11 +275,8 @@ async def main(page: ft.Page):
         elif page.route == routes["dashboard"]:
             page.views.append(dashboard_view())
         
-        elif page.route == routes["KH"]:
-            # Get the view from your sales_phone instance            
+        elif page.route == routes["KH"]:          
             kh_view = customers.get_view(page, back_route=routes["dashboard"])
-
-            # Inject the Navigation Bar so it appears here too
             kh_view.navigation_bar = get_nav_bar() 
             
             page.views.append(kh_view)
@@ -191,7 +300,7 @@ async def main(page: ft.Page):
             page.views.append(settings_view())
             #🔹 5. SETTINGS VIEW
         elif page.route == routes["home"]:
-            page.views.append(settings_view())
+            page.views.append(home_view())
 
         page.update()
 
@@ -203,7 +312,6 @@ async def main(page: ft.Page):
     page.on_route_change = route_change
     page.on_view_pop = view_pop
     
-    ts_view = sales_phone.get_view(page, routes["marketing"])
     # Start the app
     await page.push_route('/login')
 
