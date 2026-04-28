@@ -65,6 +65,26 @@ class OdooAPI:
             print(f"Login Error: {e}")
         return False
     
+    def get_selection(self, model: str, field_name: str):
+        """
+        Get selection options for a field.
+        Returns: list of (value, label)
+        """
+
+        args = [[field_name]]
+        kwargs = {
+            "attributes": ["selection"]
+        }
+
+        response = self.__call_kw(model, "fields_get", args, kwargs)
+
+        if response and response.get("result"):
+            field_info = response["result"].get(field_name)
+            if field_info:
+                return field_info.get("selection", [])
+
+        return []
+
     def get_record_by_id(self, model: str, record_id: int, fields: list = None):
         """
         Fetches a single record by its ID.

@@ -34,20 +34,15 @@ class CustomerFormPage:
             keyboard_type=ft.KeyboardType.EMAIL,
         )
 
-        self.zalo = ft.TextField(
-            label="Zalo",
-            hint_text="ID hoặc số Zalo",
-            value=self.customer.get("zalo", ""),
+        self.sources = ft.Dropdown(
+            label="Từ Nguồn",
+            options=[],
+            value=self.customer.get("source", "other")
         )
 
         self.types = ft.Dropdown(
             label="Loại khách hàng",
-            options=[
-                ft.DropdownOption(key='individual', text='Cá nhân'),
-                ft.DropdownOption(key='broker', text='Môi giới'),
-                ft.DropdownOption(key='investor', text='Nhà đầu tư'),
-                ft.DropdownOption(key='company', text='Doanh nghiệp'),
-            ],
+            options=[],
             value=self.customer.get("type", "individual"),
         )
 
@@ -71,10 +66,12 @@ class CustomerFormPage:
             scroll=ft.ScrollMode.AUTO
         )
 
-        self.load_projects()
+        self.__load_projects()
+        self.__load_types()
+        self.__load_sources()
 
 
-    def load_projects(self):
+    def __load_projects(self):
         projects = self.app.projects  # or from Odoo
 
         self.project_checkboxes.controls = [
@@ -84,6 +81,28 @@ class CustomerFormPage:
                 on_change=lambda e, pid=p["id"]: self.toggle_project(pid, e.control.value)
             )
             for p in projects
+        ]
+    
+    def __load_types(self):
+        types = self.app.types
+
+        self.types.options = [
+            ft.DropdownOption(
+                key=key,
+                text=label
+            )
+            for key, label in types
+        ]
+
+    def __load_sources(self):
+        sources = self.app.sources
+
+        self.sources.options = [
+            ft.DropdownOption(
+                key=key,
+                text=label
+            )
+            for key, label in sources
         ]
     
     def toggle_project(self, project_id, checked):
@@ -106,7 +125,6 @@ class CustomerFormPage:
             "name": self.name.value,
             "phone": self.phone.value,
             "email": self.email.value,
-            "zalo": self.zalo.value,
             "type": self.types.value,
             "project_ids": list(self.selected_projects)
         }
@@ -191,8 +209,8 @@ class CustomerFormPage:
                                         self.name,
                                         self.phone,
                                         self.email,
-                                        self.zalo,
                                         self.types,
+                                        self.sources,
 
                                         ft.Text("Dự án quan tâm", weight=ft.FontWeight.BOLD),
                                         self.project_checkboxes,
@@ -218,6 +236,8 @@ class CustomerApp:
         self.page = None
         self.client = None
         self.projects = []
+        self.types = []
+        self.sources = []
 
         self.customers = []
         self.filtered = []
@@ -455,7 +475,7 @@ class CustomerApp:
 
         self._loading = True
         try:
-            fields = ['name', 'phone', 'email', 'zalo', 'salesperson_id', 'type', 'project_ids']
+            fields = ['name', 'phone', 'email', 'salesperson_id', 'source', 'type', 'project_ids']
             self.customers = await asyncio.to_thread(
                 self.client.get_table,
                 "sale.customer",
@@ -469,6 +489,20 @@ class CustomerApp:
                 [],
                 ['name', 'investor', 'location']
             )
+
+            if not self.types:
+                self.types = await asyncio.to_thread(
+                    self.client.get_selection,
+                    "sale.customer",
+                    'type'
+                )
+
+            if not self.sources:
+                self.sources = await asyncio.to_thread(
+                    self.client.get_selection,
+                    "sale.customer",
+                    'source'
+                )
 
             self.filtered = self.customers.copy()
             self.update_list()     
