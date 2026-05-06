@@ -256,6 +256,7 @@ class CustomerApp:
         self.projects = []
         self.types = []
         self.sources = []
+        self.states = []
 
         self.customers = []
         self.filtered = []
