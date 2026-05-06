@@ -1,10 +1,14 @@
-import asyncio
 import flet as ft
+import asyncio
+
+from core.components import ActionBox
+from core.utils import Utils
 from modules.telesales import telesales
-from modules.qlkh import CustomerApp
+from modules.crm import qlkh
 from login_view import LoginView
 
-# 1. Configuration & Routes
+
+# --- ROUTES ---
 routes = {
     'login': '/login',
     'home': '/home',
@@ -15,12 +19,19 @@ routes = {
     'telesales': '/dashboard/marketing/telesales'
 }
 
+
+# --- EXTERNAL MODULES ---
+login_view = LoginView()
+sales_phone = telesales.TelesalesApp()
+customers = qlkh.CustomerApp()
+
+
+# --- MAIN APP ---
 async def main(page: ft.Page):
-    # Initialize basic page settings
     page.title = "HT Land"
     page.padding = 20
 
-    # 🔹 THEMES (Keeping your exact setup)
+    # THEMES
     page.theme = ft.Theme(
         color_scheme=ft.ColorScheme(
             primary=ft.Colors.BLUE,
@@ -30,6 +41,7 @@ async def main(page: ft.Page):
             on_primary=ft.Colors.WHITE,
         )
     )
+
     page.dark_theme = ft.Theme(
         color_scheme=ft.ColorScheme(
             primary=ft.Colors.BLUE_200,
@@ -39,14 +51,14 @@ async def main(page: ft.Page):
             on_primary=ft.Colors.BLACK,
         )
     )
+
     page.theme_mode = ft.ThemeMode.DARK
 
-    # --- UI COMPONENTS ---
-    
+    # --- NAV BAR ---
     def get_nav_bar():
-        # Logic to determine which tab is selected based on route
         current_index = 0
-        if page.route == routes["dashboard"] or page.route.startswith("/dashboard"):
+
+        if page.route.startswith("/dashboard"):
             current_index = 1
         elif page.route == routes["settings"]:
             current_index = 2
@@ -65,23 +77,17 @@ async def main(page: ft.Page):
         target_routes = [routes["home"], routes["dashboard"], routes["settings"]]
         await page.push_route(target_routes[e.control.selected_index])
 
-    def box(title, icon, on_click=None):
-        return ft.Container(
-            content=ft.Column([
-                ft.Icon(icon, size=28, color=ft.Colors.PRIMARY),
-                ft.Text(title, size=15, weight="bold"),
-            ], alignment="center", horizontal_alignment="center"),
-            padding=15, border_radius=20, width=150, height=100,
-            bgcolor=ft.Colors.SURFACE, ink=True, on_click=on_click,
-            shadow=ft.BoxShadow(blur_radius=12, color=ft.Colors.with_opacity(0.1, "black"))
-        )
-
     def logout():
         page.session.store.set("client", None)
         asyncio.create_task(page.push_route(routes["login"]))
 
     # --- VIEW GENERATORS (Clean tracking) ---
 
+    def logout():
+        page.session.set("client", None)
+        asyncio.create_task(page.push_route(routes["login"]))
+
+    # --- VIEWS ---
     def home_view():
         return ft.View(
             route=routes["home"],
@@ -206,22 +212,17 @@ async def main(page: ft.Page):
             navigation_bar=get_nav_bar(),
             controls=[
                 ft.AppBar(title=ft.Text("Dashboard"), bgcolor=ft.Colors.PRIMARY),
-
-                ft.Container(
-                    content=ft.GridView(
-                        runs_count=2,
-                        max_extent=200,
-                        spacing=20,
-                        run_spacing=20,
-                        controls=[
-                            box("Nhân Sự", ft.Icons.GROUP),
-                            box("Khách Hàng", ft.Icons.PERSON_OUTLINE, on_click=lambda _: asyncio.create_task(page.push_route(routes["KH"]))),
-                            box("Dự Án", ft.Icons.HOUSE),
-                            box("Marketing", ft.Icons.CAMPAIGN,
-                                on_click=lambda _: asyncio.create_task(page.push_route(routes["marketing"]))),
-                        ],
-                    ),
-                    padding=20
+                ft.GridView(
+                    runs_count=2,
+                    max_extent=200,
+                    controls=[
+                        ActionBox("Nhân Sự\n(đang phát triển)", ft.Icons.GROUP),
+                        ActionBox("Khách Hàng", ft.Icons.PERSON_OUTLINE,
+                                  on_click=lambda _: Utils.safe_route(page, routes["KH"])),
+                        ActionBox("Dự Án\n(đang phát triển)", ft.Icons.HOUSE),
+                        ActionBox("Marketing", ft.Icons.CAMPAIGN,
+                                  on_click=lambda _: Utils.safe_route(page, routes["marketing"])),
+                    ]
                 )
             ]
         )
@@ -232,77 +233,85 @@ async def main(page: ft.Page):
             navigation_bar=get_nav_bar(),
             controls=[
                 ft.AppBar(
-                    title=ft.Text("Marketing", color=ft.Colors.ON_PRIMARY),
+                    title=ft.Text("Marketing"),
                     leading=ft.IconButton(
-                                icon=ft.Icons.ARROW_BACK,
-                                icon_color=ft.Colors.ON_PRIMARY,
-                                on_click=lambda e: asyncio.create_task(
-                                    page.push_route(routes["dashboard"])
-                                )
-                            ),
-                    bgcolor=ft.Colors.PRIMARY,
-                ),
-                ft.Container(
-                    content=ft.GridView(
-                        runs_count=2,
-                        max_extent=200,
-                        spacing=20,
-                        run_spacing=20,
-                        controls=[
-                            box("Telesales", ft.Icons.PHONE, 
-                                on_click=lambda _: asyncio.create_task(page.push_route(routes["telesales"]))),
-                            box("Mailing", ft.Icons.MAIL),
-                            box("Posting", ft.Icons.POST_ADD)
-                        ]
+                        icon=ft.Icons.ARROW_BACK,
+                        on_click=lambda _: Utils.safe_route(page, routes["dashboard"])
                     ),
-                    padding=20
-                )              
+                ),
+                ft.GridView(
+                    runs_count=2,
+                    max_extent=200,
+                    controls=[
+                        ActionBox("Telesales", ft.Icons.PHONE,
+                                  on_click=lambda _: Utils.safe_route(page, routes["telesales"])),
+                        ActionBox("Mailing\n(đang phát triển)", ft.Icons.MAIL),
+                        ActionBox("Posting\n(đang phát triển)", ft.Icons.POST_ADD)
+                    ]
+                )
             ]
         )
 
-    # --- ROUTING ENGINE ---
-    def route_change():
-        page.views.clear()
+    # --- ROUTER ---
+    class Router:
+        def __init__(self):
+            self.route_map = {
+                routes["login"]: self.login,
+                routes["home"]: self.home,
+                routes["dashboard"]: self.dashboard,
+                routes["KH"]: self.customers,
+                routes["marketing"]: self.marketing,
+                routes["telesales"]: self.telesales,
+                routes["settings"]: self.settings,
+            }
 
-        # 🔹 1. LOGIN VIEW
-        # We check if the user is on the login route
-        if page.route == routes["login"]:
-            login_screen = login_view.get_view(page)
-            
-            page.views.append(login_screen)
+        def attach_nav(self, view):
+            view.navigation_bar = get_nav_bar()
+            return view
 
-        # 🔹 2. DASHBOARD VIEW
-        elif page.route == routes["dashboard"]:
-            page.views.append(dashboard_view())
-        
-        elif page.route == routes["KH"]:          
-            kh_view = customers.get_view(page, back_route=routes["dashboard"])
-            kh_view.navigation_bar = get_nav_bar() 
-            
-            page.views.append(kh_view)
+        def resolve(self):
+            page.views.clear()
 
-        # 🔹 3. MARKETING VIEW
-        elif page.route == routes["marketing"]:
-            page.views.append(marketing_view())
+            handler = self.route_map.get(page.route, self.not_found)
+            view = handler()
 
-        # 🔹 4. TELESALES VIEW (External Module)
-        elif page.route == routes["telesales"]:
-            # Get the view from your sales_phone instance            
-            ts_view = sales_phone.get_view(page, back_route=routes["marketing"])
+            if view:
+                page.views.append(view)
 
-            # Inject the Navigation Bar so it appears here too
-            ts_view.navigation_bar = get_nav_bar() 
-            
-            page.views.append(ts_view)
-        
-        #🔹 5. SETTINGS VIEW
-        elif page.route == routes["settings"]:
-            page.views.append(settings_view())
-            #🔹 5. SETTINGS VIEW
-        elif page.route == routes["home"]:
-            page.views.append(home_view())
+            page.update()
 
-        page.update()
+        # --- ROUTE HANDLERS ---
+        def login(self):
+            return login_view.get_view(page)
+
+        def home(self):
+            return home_view()
+
+        def dashboard(self):
+            return dashboard_view()
+
+        def customers(self):
+            view = customers.get_view(page, back_route=routes["dashboard"])
+            return self.attach_nav(view)
+
+        def marketing(self):
+            return marketing_view()
+
+        def telesales(self):
+            view = sales_phone.get_view(page, back_route=routes["marketing"])
+            asyncio.create_task(sales_phone.fetch_data())
+            return self.attach_nav(view)
+
+        def settings(self):
+            return settings_view()
+
+        def not_found(self):
+            return ft.View(controls=[ft.Text("404 - Not Found")])
+
+    router = Router()
+
+    def route_change(e):
+        router.resolve()
 
     async def view_pop(e):
         if len(page.views) > 1:
@@ -314,9 +323,6 @@ async def main(page: ft.Page):
     
     # Start the app
     await page.push_route('/login')
-
-login_view = LoginView()
-sales_phone = telesales.TelesalesApp()
-customers = CustomerApp()
+    
 if __name__ == "__main__":
     ft.run(main)

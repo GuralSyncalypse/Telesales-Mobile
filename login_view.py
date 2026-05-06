@@ -121,7 +121,7 @@ class LoginView:
             self.show_message(page, "Đăng nhập thành công.")
             await page.push_route("/dashboard")         
         else:
-            self.show_message(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông thin.", True)
+            self.show_message(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông tin.", True)
             page.update()
 
     def show_message(self, page, text, is_error=False):
