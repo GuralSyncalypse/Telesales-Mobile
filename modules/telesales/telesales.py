@@ -1,21 +1,28 @@
-import flet as ft
-import asyncio
-import threading
+from core.utils import Utils
+import asyncio, threading
 import math
-import regex as re
-from functools import partial
 import time
+import regex as re
+import flet as ft
+from functools import partial
 
 class TelesalesApp:
-    protocol = 'https'
-
     def __init__(self):
         # Số phần tử trong 1 trang.
         self.items_per_page = 20
 
         self.page_info = ft.Text(size=16, weight=ft.FontWeight.BOLD)
-        self.prev_btn = ft.Button("Previous", on_click=self.prev_page)
-        self.next_btn = ft.Button("Next", on_click=self.next_page)
+        self.prev_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            tooltip="Previous",
+            on_click=self.prev_page
+        )
+
+        self.next_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_FORWARD,
+            tooltip="Next",
+            on_click=self.next_page
+        )
         self.list_in_use = 0
         self.current_page = 1
         self.is_paginating = False
@@ -78,13 +85,9 @@ class TelesalesApp:
 
         lv.controls = items        
 
-        # Show "no results"
-        if total_filtered == 0:
-            lv.controls.append(ft.Text("No results found"))
-
         # Update pagination info
         self.page_info.value = f"Page {self.current_page} of {total_pages}"
-        print(self.page_info.value)
+
         self.prev_btn.disabled = (self.current_page == 1)
         self.next_btn.disabled = (self.current_page == total_pages)
 
@@ -139,7 +142,7 @@ class TelesalesApp:
     def __on_search(self, query: str):
         # Define a helper to check matches to avoid repeating code
         def matches_query(item):
-            text = f"{item['customer_id'][1]} • {item['phone_number']}".lower()
+            text = f"{item['customer_id'][1]} • {item['phone']}".lower()
             return re.search(pattern, text) is not None
 
         query = query.lower()
@@ -256,7 +259,7 @@ class TelesalesApp:
         customer_data = record.get("customer_id")
         name = customer_data[1] if isinstance(customer_data, (list, tuple)) else "Unknown Customer"
 
-        phone = record.get("phone_number", "No Phone")
+        phone = record.get("phone", "No Phone")
         is_called = record.get("is_called")
         unreachable = record.get("unreachable")
 
@@ -265,7 +268,7 @@ class TelesalesApp:
             icon=ft.Icons.PHONE,
             icon_color=ft.Colors.GREEN, # Use ft.Colors for better IDE intellisense
             tooltip="Call Customer",
-            on_click=partial(self.make_call, phone_number=phone)
+            on_click=partial(self.make_call, phone=phone)
         ) 
 
         switch_btn = ft.IconButton(
@@ -317,15 +320,6 @@ class TelesalesApp:
             )
         )
 
-    def show_message(self, text, is_error=False):
-        self.page.snack_bar = ft.SnackBar(
-            content=ft.Text(text),
-            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400,
-            duration=1500,
-            behavior=ft.SnackBarBehavior.FLOATING
-        )
-        self.page.show_dialog(self.page.snack_bar) 
-
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page
         self.client = page.session.store.get("client")
@@ -344,8 +338,6 @@ class TelesalesApp:
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             self.tabs
         ], expand=True, visible=True)
-
-        asyncio.create_task(self.fetch_data())
 
         return ft.View(
             route=f"/dashboard/marketing/telesales",
@@ -433,11 +425,11 @@ class TelesalesApp:
                 ).start()
 
                 original_tile.subtitle = ft.Text(f"Note: {record["note"] or 'No notes'}", italic=True)
-                self.show_message("Note updated!")
+                Utils.show_message(self.page, "Note updated!")
                 restore_ui()
 
             except Exception as err:
-                self.show_message(f"Update failed: {str(err)}", is_error=True)
+                Utils.show_message(self.page, f"Update failed: {str(err)}", is_error=True)
                 save_btn.disabled = False
                 note_field.disabled = False
                 parent.update()
@@ -499,7 +491,7 @@ class TelesalesApp:
         self.filtered = self.__get_data_source().copy()
         self.update_list()
         
-        self.show_message(f"Moved to {dst_key.replace('_', ' ').title()}!")
+        Utils.show_message(self.page, f"Moved to {dst_key.replace('_', ' ').title()}!")
 
         end = time.perf_counter()
 
@@ -521,16 +513,6 @@ class TelesalesApp:
 
             if not success:
                 print("API failed!")
-
-        def undo(ev):
-            record["unreachable"] = prev_unreachable
-
-            # Move lại list cũ
-            if record in self.phonebook['unreachable']:
-                self.phonebook['unreachable'].remove(record)
-                self.phonebook['is_called'].append(record)
-
-            self.update_list()
 
         start = time.perf_counter()
     
@@ -557,7 +539,7 @@ class TelesalesApp:
         self.filtered = self.__get_data_source().copy()
         self.update_list()
         
-        self.show_message(f"Canceled!")
+        Utils.show_message(self.page, f"Canceled!")
 
         end = time.perf_counter()
 
@@ -569,12 +551,6 @@ class TelesalesApp:
         print(f"Elapsed time: {end - start:.6f} seconds")
 
     async def __on_exit(self, page : ft.Page, backroute):
-        self.phonebook = {
-            'called': [],
-            'not_called': [],
-            'unreachable': []
-        }
-
         self.called_lv.controls.clear()
         self.not_called_lv.controls.clear()
         self.unreachable_lv.controls.clear()
@@ -583,35 +559,22 @@ class TelesalesApp:
     
         await page.push_route(backroute)
 
-    async def make_call(self, e, phone_number):
-        await self.url_launcher.launch_url(f"tel:{phone_number}", )
-
-    def _get_phonebook_task(self, domain):
-        required_fields = [
-            'customer_id',
-            'phone_number',
-            'is_called',
-            'unreachable',
-            'note'
-        ]
-
-        return asyncio.to_thread(
-            self.client.get_table,
-            "sale.phonebook",
-            domain,
-            required_fields
-        )
+    async def make_call(self, e, phone):
+        await self.url_launcher.launch_url(f"tel:{phone}", )
 
     async def fetch_data(self, e=None):
+        if getattr(self, "_loading", False):
+            self.update_list()
+            return
         start = time.time()
 
         # 1. Prevent concurrent runs    
         if not self.client:
-            self.show_message("No client!", is_error=True)
+            Utils.show_message(self.page, "No client!", is_error=True)
             return
 
         if self.is_syncing:
-            self.show_message("Đang đồng bộ, vui lòng chờ!")
+            Utils.show_message(self.page, "Đang đồng bộ, vui lòng chờ!")
             return
 
         # 2. UI Feedback: Disable button and show loading state
@@ -620,9 +583,9 @@ class TelesalesApp:
         self.sync_button.update()
         
         self.is_syncing = True
-
+        self._loading = True
         try:
-            required_fields = ['customer_id', 'phone_number', 'is_called', 'unreachable', 'note']
+            required_fields = ['customer_id', 'phone', 'is_called', 'unreachable', 'note']
             called_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
@@ -646,10 +609,10 @@ class TelesalesApp:
 
             self.filtered = self.__get_data_source().copy()
             self.update_list()     
-            self.show_message("Synced!")
+            Utils.show_message(self.page, "Synced!")
 
         except Exception as err:
-            self.show_message(f"Lỗi: {str(err)}", is_error=True)
+            Utils.show_message(self.page, f"Lỗi: {str(err)}", is_error=True)
 
         finally:
             self.is_syncing = False

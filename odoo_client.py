@@ -53,11 +53,38 @@ class OdooAPI:
             result = res.json().get('result')
             if result:
                 self.cookies = res.cookies
+
+                # 🔥 store user info
+                self.uid = result.get("uid")
+                self.user_context = result.get("user_context", {})
+                self.username = result.get("username")
+                self.name = result.get("name")
+
                 return True
         except Exception as e:
             print(f"Login Error: {e}")
         return False
     
+    def get_selection(self, model: str, field_name: str):
+        """
+        Get selection options for a field.
+        Returns: list of (value, label)
+        """
+
+        args = [[field_name]]
+        kwargs = {
+            "attributes": ["selection"]
+        }
+
+        response = self.__call_kw(model, "fields_get", args, kwargs)
+
+        if response and response.get("result"):
+            field_info = response["result"].get(field_name)
+            if field_info:
+                return field_info.get("selection", [])
+
+        return []
+
     def get_record_by_id(self, model: str, record_id: int, fields: list = None):
         """
         Fetches a single record by its ID.
@@ -100,6 +127,34 @@ class OdooAPI:
 
         # Return the result list if it exists, otherwise an empty list
         return response.get('result', []) if response else []
+
+    def create_record(self, model: str, values: dict):
+        """
+        Creates a new record in the given model.
+        :param model: Odoo model name (e.g., 'res.partner')
+        :param values: Dictionary of field values
+        :return: New record ID or None
+        """
+        args = [values]
+
+        response = self.__call_kw(model, "create", args)
+
+        if response and response.get('result'):
+            return response['result']  # ID of new record
+
+        return None
+
+
+    def update_record(self, model: str, record_id: int, values: dict):
+        """
+        Update multiple fields of a record.
+        :param values: dict of field_name -> new_value
+        """
+        args = [[record_id], values]
+
+        response = self.__call_kw(model, "write", args)
+
+        return response.get('result') is True if response else False
 
     def update_field(self, model: str, record_id: int, field_name: str, new_value):
         # Odoo 'write' expects: [ [ids], {values_dict} ]
