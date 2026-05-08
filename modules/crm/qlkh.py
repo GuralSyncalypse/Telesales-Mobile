@@ -1,13 +1,12 @@
+from core.utils import Utils
 import flet as ft
-import asyncio
-import threading
+import asyncio, threading
 import math
 import regex as re
 import time
-from functools import partial
 
 class CustomerFormPage:
-    def __init__(self, page, app, customer=None):
+    def __init__(self, page : ft.Page, app, customer=None):
         self.page = page
         self.app = app
         self.customer = customer or {}
@@ -34,21 +33,22 @@ class CustomerFormPage:
             keyboard_type=ft.KeyboardType.EMAIL,
         )
 
-        self.zalo = ft.TextField(
-            label="Zalo",
-            hint_text="ID hoặc số Zalo",
-            value=self.customer.get("zalo", ""),
+        self.sources = ft.Dropdown(
+            label="Từ Nguồn",
+            options=[],
+            value=self.customer.get("source", "other")
         )
 
         self.types = ft.Dropdown(
-            label="Loại khách hàng",
-            options=[
-                ft.DropdownOption(key='individual', text='Cá nhân'),
-                ft.DropdownOption(key='broker', text='Môi giới'),
-                ft.DropdownOption(key='investor', text='Nhà đầu tư'),
-                ft.DropdownOption(key='company', text='Doanh nghiệp'),
-            ],
+            label="Phân Loại",
+            options=[],
             value=self.customer.get("type", "individual"),
+        )
+
+        self.states = ft.Dropdown(
+            label="Trạng Thái",
+            options=[],
+            value=self.customer.get("type", "active"),
         )
 
         # ===== BUTTON =====
@@ -71,10 +71,13 @@ class CustomerFormPage:
             scroll=ft.ScrollMode.AUTO
         )
 
-        self.load_projects()
+        self.__load_projects()
+        self.__load_types()
+        self.__load_sources()
+        self.__load_states()
 
 
-    def load_projects(self):
+    def __load_projects(self):
         projects = self.app.projects  # or from Odoo
 
         self.project_checkboxes.controls = [
@@ -86,6 +89,39 @@ class CustomerFormPage:
             for p in projects
         ]
     
+    def __load_types(self):
+        types = self.app.types
+
+        self.types.options = [
+            ft.DropdownOption(
+                key=key,
+                text=label
+            )
+            for key, label in types
+        ]
+
+    def __load_sources(self):
+        sources = self.app.sources
+
+        self.sources.options = [
+            ft.DropdownOption(
+                key=key,
+                text=label
+            )
+            for key, label in sources
+        ]
+
+    def __load_states(self):
+        states = self.app.states
+
+        self.states.options = [
+            ft.DropdownOption(
+                key=key,
+                text=label
+            )
+            for key, label in states
+        ]    
+    
     def toggle_project(self, project_id, checked):
         if checked:
             self.selected_projects.add(project_id)
@@ -95,9 +131,9 @@ class CustomerFormPage:
     # ===== VALIDATION =====
     def validate(self):
         if not self.name.value.strip():
-            self.name.error_text = "Tên không được để trống"
+            self.name.error = "Tên không được để trống"
             return False
-        self.name.error_text = None
+        self.name.error = None
         return True
 
     # ===== SAVE =====
@@ -106,8 +142,8 @@ class CustomerFormPage:
             "name": self.name.value,
             "phone": self.phone.value,
             "email": self.email.value,
-            "zalo": self.zalo.value,
             "type": self.types.value,
+            "state": self.states.value,
             "project_ids": list(self.selected_projects)
         }
 
@@ -152,7 +188,7 @@ class CustomerFormPage:
                 raise Exception("API rejected update")
        
 
-        self.app.show_message("Saved!")
+        Utils.show_message(self.page, "Saved!")
         self.app.filtered = self.app.customers
         self.app.update_list()
 
@@ -191,8 +227,8 @@ class CustomerFormPage:
                                         self.name,
                                         self.phone,
                                         self.email,
-                                        self.zalo,
                                         self.types,
+                                        self.sources,
 
                                         ft.Text("Dự án quan tâm", weight=ft.FontWeight.BOLD),
                                         self.project_checkboxes,
@@ -218,6 +254,9 @@ class CustomerApp:
         self.page = None
         self.client = None
         self.projects = []
+        self.types = []
+        self.sources = []
+        self.states = []
 
         self.customers = []
         self.filtered = []
@@ -227,8 +266,17 @@ class CustomerApp:
 
         self.is_syncing = False
         self.page_info = ft.Text(size=16, weight=ft.FontWeight.BOLD)
-        self.prev_btn = ft.Button("Previous", on_click=self.prev_page, disabled=True)
-        self.next_btn = ft.Button("Next", on_click=self.next_page, disabled=True)
+        self.prev_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            tooltip="Previous",
+            on_click=self.prev_page
+        )
+
+        self.next_btn = ft.IconButton(
+            icon=ft.Icons.ARROW_FORWARD,
+            tooltip="Next",
+            on_click=self.next_page
+        )
 
         self.list_view = ft.ListView(
             expand=True,
@@ -244,24 +292,12 @@ class CustomerApp:
             expand=True
         )
 
-    async def __on_exit(self, backroute):
-        self.customers = []
-        self.filtered = []
-        
+    async def __on_exit(self, backroute):        
         self.list_view.controls.clear()
         self.is_syncing = False
        
         self.update_list()
         await self.page.push_route(backroute)
-
-    def show_message(self, text, is_error=False):
-        self.page.snack_bar = ft.SnackBar(
-            content=ft.Text(text),
-            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400,
-            duration=1500,
-            behavior=ft.SnackBarBehavior.FLOATING
-        )
-        self.page.show_dialog(self.page.snack_bar) 
 
     def next_page(self, e):
         if self.is_paginating:
@@ -435,15 +471,13 @@ class CustomerApp:
         if getattr(self, "_loading", False):
             return
 
-        start = time.time()
-
         # 1. Prevent concurrent runs    
         if not self.client:
-            self.show_message("No client!", is_error=True)
+            Utils.show_message(self.page, "No client!", is_error=True)
             return
 
         if self.is_syncing:
-            self.show_message("Đang đồng bộ, vui lòng chờ!")
+            Utils.show_message(self.page, "Đang đồng bộ, vui lòng chờ!")
             return
 
         # 2. UI Feedback: Disable button and show loading state
@@ -455,7 +489,7 @@ class CustomerApp:
 
         self._loading = True
         try:
-            fields = ['name', 'phone', 'email', 'zalo', 'salesperson_id', 'type', 'project_ids']
+            fields = ['name', 'phone', 'email', 'salesperson_id', 'source', 'type', 'state', 'project_ids']
             self.customers = await asyncio.to_thread(
                 self.client.get_table,
                 "sale.customer",
@@ -470,12 +504,33 @@ class CustomerApp:
                 ['name', 'investor', 'location']
             )
 
+            if not self.types:
+                self.types = await asyncio.to_thread(
+                    self.client.get_selection,
+                    "sale.customer",
+                    'type'
+                )
+
+            if not self.sources:
+                self.sources = await asyncio.to_thread(
+                    self.client.get_selection,
+                    "sale.customer",
+                    'source'
+                )
+
+            if not self.states:
+                self.states = await asyncio.to_thread(
+                    self.client.get_selection,
+                    "sale.customer",
+                    'state'
+                )
+
             self.filtered = self.customers.copy()
             self.update_list()     
-            self.show_message("Synced!")
+            Utils.show_message(self.page, "Synced!")
 
         except Exception as err:
-            self.show_message(f"Lỗi: {str(err)}", is_error=True)
+            Utils.show_message(self.page, f"Lỗi: {str(err)}", is_error=True)
 
         finally:
             self._loading = False
