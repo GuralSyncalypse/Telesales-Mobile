@@ -566,7 +566,6 @@ class TelesalesApp:
         if getattr(self, "_loading", False):
             self.update_list()
             return
-        start = time.time()
 
         # 1. Prevent concurrent runs    
         if not self.client:
@@ -615,6 +614,7 @@ class TelesalesApp:
             Utils.show_message(self.page, f"Lỗi: {str(err)}", is_error=True)
 
         finally:
+            self._loading = False
             self.is_syncing = False
             self.sync_button.disabled = False
             self.sync_button.icon = ft.Icons.REFRESH

@@ -6,7 +6,7 @@ from odoo_client import OdooAPI as OdooAPI
 class LoginView:
     def __init__(self):
         self.logo = ft.Image(
-            src="assets/HTLand-1.png", 
+            src="assets/logo.png", 
             width=250,
             height=200,
             fit='CONTAIN',

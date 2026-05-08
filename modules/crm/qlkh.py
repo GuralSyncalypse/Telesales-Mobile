@@ -292,10 +292,7 @@ class CustomerApp:
             expand=True
         )
 
-    async def __on_exit(self, backroute):
-        self.customers = []
-        self.filtered = []
-        
+    async def __on_exit(self, backroute):        
         self.list_view.controls.clear()
         self.is_syncing = False
        
@@ -473,8 +470,6 @@ class CustomerApp:
     async def fetch_data(self, e=None):
         if getattr(self, "_loading", False):
             return
-
-        start = time.time()
 
         # 1. Prevent concurrent runs    
         if not self.client:

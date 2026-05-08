@@ -292,6 +292,7 @@ async def main(page: ft.Page):
 
         def customers(self):
             view = customers.get_view(page, back_route=routes["dashboard"])
+            asyncio.create_task(customers.fetch_data())
             return self.attach_nav(view)
 
         def marketing(self):
