@@ -83,10 +83,6 @@ async def main(page: ft.Page):
 
     # --- VIEW GENERATORS (Clean tracking) ---
 
-    def logout():
-        page.session.set("client", None)
-        asyncio.create_task(page.push_route(routes["login"]))
-
     # --- VIEWS ---
     def home_view():
         return ft.View(
