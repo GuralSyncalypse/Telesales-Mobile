@@ -65,6 +65,22 @@ class OdooAPI:
             print(f"Login Error: {e}")
         return False
     
+    def has_group(self, group_xml_id: str):
+        """
+        Check if current user belongs to a group.
+        Example: base.group_system
+        """
+        if not self.uid:
+            return False
+
+        args = [[self.uid], group_xml_id]
+        response = self.__call_kw("res.users", "has_group", args)
+
+        if response and "result" in response:
+            return response["result"]
+
+        return False
+
     def get_selection(self, model: str, field_name: str):
         """
         Get selection options for a field.

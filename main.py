@@ -7,6 +7,12 @@ from modules.telesales import telesales
 from modules.crm import qlkh
 from login_view import LoginView
 
+GROUPS = {
+    'user': 'ht_crm.group_ht_user',
+    'lead': 'ht_crm.group_ht_leader',
+    'executive': 'ht_crm.group_ht_executive',
+    'admin': 'base.group_system'
+}
 
 # --- ROUTES ---
 routes = {
