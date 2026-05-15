@@ -1,4 +1,5 @@
 from core.utils import Utils
+from datetime import timedelta
 import flet as ft
 import asyncio, threading
 import math
@@ -33,6 +34,58 @@ class CustomerFormPage:
             keyboard_type=ft.KeyboardType.EMAIL,
         )
 
+        # ===== NEW FIELDS =====
+
+        self.date_of_birth = ft.TextField(
+            label="Ngày sinh",
+            hint_text="YYYY-MM-DD",
+            value=self.customer.get("date_of_birth", ""),
+            read_only=True,
+            prefix_icon=ft.Icons.CALENDAR_MONTH,
+            on_click=self.pick_date_of_birth,
+        )
+
+        self.id_number = ft.TextField(
+            label="CMND / Passport",
+            hint_text="Nhập số giấy tờ",
+            value=self.customer.get("id_number", ""),
+            max_length=20,
+        )
+
+        self.issue_date = ft.TextField(
+            label="Ngày cấp",
+            hint_text="YYYY-MM-DD",
+            value=self.customer.get("issue_date", ""),
+            read_only=True,
+            prefix_icon=ft.Icons.CALENDAR_MONTH,
+            on_click=self.pick_issue_date,
+        )
+
+        self.issue_place = ft.TextField(
+            label="Nơi cấp",
+            hint_text="VD: Cục CSQLHC về TTXH",
+            value=self.customer.get("issue_place", ""),
+        )
+
+        self.permanent_address = ft.TextField(
+            label="Địa chỉ thường trú",
+            hint_text="Nhập địa chỉ thường trú",
+            value=self.customer.get("permanent_address", ""),
+            multiline=True,
+            min_lines=2,
+            max_lines=4,
+        )
+
+        self.contact_address = ft.TextField(
+            label="Địa chỉ liên lạc",
+            hint_text="Nhập địa chỉ liên lạc",
+            value=self.customer.get("contact_address", ""),
+            multiline=True,
+            min_lines=2,
+            max_lines=4,
+        )
+
+        # ===== DROPDOWNS =====
         self.sources = ft.Dropdown(
             label="Từ Nguồn",
             options=[],
@@ -45,10 +98,10 @@ class CustomerFormPage:
             value=self.customer.get("type", "individual"),
         )
 
-        self.states = ft.Dropdown(
+        self.statuses = ft.Dropdown(
             label="Trạng Thái",
             options=[],
-            value=self.customer.get("type", "active"),
+            value=self.customer.get("status", "new"),
         )
 
         # ===== BUTTON =====
@@ -71,10 +124,47 @@ class CustomerFormPage:
             scroll=ft.ScrollMode.AUTO
         )
 
+        # ===== DATE PICKERS =====
+        self.issue_date_picker = ft.DatePicker(on_change=self.on_issue_date_change)
+
+        self.date_of_birth_picker = ft.DatePicker(on_change=self.on_date_of_birth_change)
+
+        self.page.overlay.extend([
+            self.date_of_birth_picker,
+            self.issue_date_picker,
+        ])
+
+
         self.__load_projects()
         self.__load_types()
         self.__load_sources()
-        self.__load_states()
+        self.__load_statuses()
+
+
+    # Events
+    def on_issue_date_change(self, e):
+        if self.issue_date_picker.value:
+            dt = self.issue_date_picker.value + timedelta(hours=7)
+
+            self.issue_date.value = dt.strftime("%Y-%m-%d")
+            self.issue_date.update()
+
+
+    def on_date_of_birth_change(self, e):
+        if self.date_of_birth_picker.value:
+            dt = self.date_of_birth_picker.value + timedelta(hours=7)
+
+            self.date_of_birth.value = dt.strftime("%Y-%m-%d")
+            self.date_of_birth.update()
+
+    def pick_issue_date(self, e):
+        self.page.show_dialog(self.issue_date_picker)
+        self.page.update()
+
+
+    def pick_date_of_birth(self, e):
+        self.page.show_dialog(self.date_of_birth_picker)
+        self.page.update()
 
 
     def __load_projects(self):
@@ -111,15 +201,15 @@ class CustomerFormPage:
             for key, label in sources
         ]
 
-    def __load_states(self):
-        states = self.app.states
+    def __load_statuses(self):
+        statuses = self.app.statuses
 
-        self.states.options = [
+        self.statuses.options = [
             ft.DropdownOption(
                 key=key,
                 text=label
             )
-            for key, label in states
+            for key, label in statuses
         ]    
     
     def toggle_project(self, project_id, checked):
@@ -142,9 +232,22 @@ class CustomerFormPage:
             "name": self.name.value,
             "phone": self.phone.value,
             "email": self.email.value,
+
+            # Thông tin bổ sung
+            "date_of_birth": self.date_of_birth.value,
+            "id_number": self.id_number.value,
+            "issue_date": self.issue_date.value,
+            "issue_place": self.issue_place.value,
+            "permanent_address": self.permanent_address.value,
+            "contact_address": self.contact_address.value,
+
+            # Dropdowns
+            "source": self.sources.value,
             "type": self.types.value,
-            "state": self.states.value,
-            "project_ids": list(self.selected_projects)
+            "status": self.statuses.value,
+
+            # Many2many projects
+            "project_ids": list(self.selected_projects),
         }
 
     def save_customer(self, data):
@@ -213,7 +316,7 @@ class CustomerFormPage:
                         ft.Card(
                             elevation=3,
                             content=ft.Container(
-                                width=500,
+                                width=700,
                                 padding=20,
                                 content=ft.Column(
                                     spacing=15,
@@ -224,22 +327,123 @@ class CustomerFormPage:
                                             weight=ft.FontWeight.BOLD,
                                         ),
 
-                                        self.name,
-                                        self.phone,
-                                        self.email,
-                                        self.types,
-                                        self.sources,
+                                        # ===== THÔNG TIN CƠ BẢN =====
+                                        ft.ResponsiveRow(
+                                            controls=[
+                                                ft.Container(
+                                                    self.name,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                                ft.Container(
+                                                    self.phone,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
 
-                                        ft.Text("Dự án quan tâm", weight=ft.FontWeight.BOLD),
-                                        self.project_checkboxes,
+                                                ft.Container(
+                                                    self.email,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                                ft.Container(
+                                                    self.date_of_birth,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
 
-                                        ft.Divider(),
+                                                ft.Container(
+                                                    self.types,
+                                                    col={"sm": 12, "md": 4},
+                                                ),
+                                                ft.Container(
+                                                    self.sources,
+                                                    col={"sm": 12, "md": 4},
+                                                ),
+                                                ft.Container(
+                                                    self.statuses,
+                                                    col={"sm": 12, "md": 4},
+                                                ),
+                                            ],
+                                        ),
 
+                                        ft.Divider(height=24),
+
+                                        # ===== THÔNG TIN GIẤY TỜ =====
+                                        ft.Text(
+                                            "Thông tin giấy tờ",
+                                            weight=ft.FontWeight.BOLD,
+                                            size=16,
+                                        ),
+
+                                        # Row 1
+                                        ft.ResponsiveRow(
+                                            controls=[
+                                                ft.Container(
+                                                    self.issue_date,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                                ft.Container(
+                                                    self.issue_place,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                            ],
+                                        ),
+
+                                        # Row 2
+                                        ft.ResponsiveRow(
+                                            controls=[
+                                                ft.Container(
+                                                    self.id_number,
+                                                    col={"sm": 12, "md": 12},
+                                                ),
+                                            ],
+                                        ),
+
+                                        ft.Divider(height=24),
+
+                                        # ===== ĐỊA CHỈ =====
+                                        ft.Text(
+                                            "Thông tin địa chỉ",
+                                            weight=ft.FontWeight.BOLD,
+                                            size=16,
+                                        ),
+
+                                        ft.ResponsiveRow(
+                                            controls=[
+                                                ft.Container(
+                                                    self.permanent_address,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                                ft.Container(
+                                                    self.contact_address,
+                                                    col={"sm": 12, "md": 6},
+                                                ),
+                                            ],
+                                        ),
+
+                                        ft.Divider(height=24),
+
+                                        # ===== DỰ ÁN =====
+                                        ft.Text(
+                                            "Dự án quan tâm",
+                                            weight=ft.FontWeight.BOLD,
+                                            size=16,
+                                        ),
+
+                                        ft.Container(
+                                            content=self.project_checkboxes,
+                                            padding=10,
+                                            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                                            border_radius=10,
+                                        ),
+
+                                        ft.Divider(height=24),
+
+                                        # ===== ACTIONS =====
                                         ft.Row(
                                             alignment=ft.MainAxisAlignment.END,
-                                            controls=[self.save_btn],
+                                            controls=[
+                                                self.save_btn,
+                                            ],
                                         ),
-                                    ],
+                                    ]
                                 ),
                             ),
                         )
@@ -256,7 +460,7 @@ class CustomerApp:
         self.projects = []
         self.types = []
         self.sources = []
-        self.states = []
+        self.statuses = []
 
         self.customers = []
         self.filtered = []
@@ -318,7 +522,6 @@ class CustomerApp:
             btn.update()
 
         end = time.perf_counter()
-        print(f"next_page took {end - start:.6f} seconds")
 
     def prev_page(self, e):
         if self.is_paginating:
@@ -339,7 +542,6 @@ class CustomerApp:
             btn.update()
 
         end = time.perf_counter()
-        print(f"next_page took {end - start:.6f} seconds")
 
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page
@@ -489,41 +691,77 @@ class CustomerApp:
 
         self._loading = True
         try:
-            fields = ['name', 'phone', 'email', 'salesperson_id', 'source', 'type', 'state', 'project_ids']
-            self.customers = await asyncio.to_thread(
+            fields = ['name', 'phone', 'email', 'source', 'type', 'status', 'project_ids']
+
+            # ===== MAIN DATA =====
+            customers_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.customer",
                 [],
                 fields
             )
 
-            self.projects = await asyncio.to_thread(
+            # ===== SUPPORTING DATA =====
+            projects_task = asyncio.to_thread(
                 self.client.get_table,
                 "estate.project",
                 [],
                 ['name', 'investor', 'location']
             )
 
-            if not self.types:
-                self.types = await asyncio.to_thread(
+            types_task = (
+                asyncio.to_thread(
                     self.client.get_selection,
                     "sale.customer",
                     'type'
                 )
+                if not self.types else None
+            )
 
-            if not self.sources:
-                self.sources = await asyncio.to_thread(
+            sources_task = (
+                asyncio.to_thread(
                     self.client.get_selection,
                     "sale.customer",
                     'source'
                 )
+                if not self.sources else None
+            )
 
-            if not self.states:
-                self.states = await asyncio.to_thread(
+            statuses_task = (
+                asyncio.to_thread(
                     self.client.get_selection,
                     "sale.customer",
-                    'state'
+                    'status'
                 )
+                if not self.statuses else None
+            )
+
+            results = await asyncio.gather(
+                customers_task,
+                projects_task,
+                *(t for t in [
+                    types_task,
+                    sources_task,
+                    statuses_task
+                ] if t)
+            )
+
+            # ===== ASSIGN =====
+            self.customers = results[0]
+            self.projects = results[1]
+
+            index = 2
+
+            if not self.types:
+                self.types = results[index]
+                index += 1
+
+            if not self.sources:
+                self.sources = results[index]
+                index += 1
+
+            if not self.statuses:
+                self.statuses = results[index]
 
             self.filtered = self.customers.copy()
             self.update_list()     

@@ -7,6 +7,12 @@ from modules.telesales import telesales
 from modules.crm import qlkh
 from login_view import LoginView
 
+GROUPS = {
+    'user': 'ht_crm.group_ht_user',
+    'lead': 'ht_crm.group_ht_leader',
+    'executive': 'ht_crm.group_ht_executive',
+    'admin': 'base.group_system'
+}
 
 # --- ROUTES ---
 routes = {
@@ -86,10 +92,6 @@ async def main(page: ft.Page):
         asyncio.create_task(page.push_route(routes["login"]))
 
     # --- VIEW GENERATORS (Clean tracking) ---
-
-    def logout():
-        page.session.set("client", None)
-        asyncio.create_task(page.push_route(routes["login"]))
 
     # --- VIEWS ---
     def home_view():

@@ -1,7 +1,8 @@
 import flet as ft
 import asyncio
-import time
+import json
 from odoo_client import OdooAPI as OdooAPI
+from core.utils import Utils
 
 class LoginView:
     def __init__(self):
@@ -49,8 +50,37 @@ class LoginView:
             )
         )
 
+        self.remember_password_checkbox = ft.Checkbox(
+            label="Remember password",
+            value=False
+        )
+
+    async def __get_previous_login_info(self):
+        login_info = await self.page.shared_preferences.get("login_info")
+
+        if login_info:
+            login_info = json.loads(login_info)
+
+            self.domain_input.value = login_info.get("domain", "")
+            self.db_input.value = login_info.get("db", "")
+            self.user_input.value = login_info.get("user", "")
+            self.https_checkbox.value = login_info.get("https", True)
+
+            self.remember_password_checkbox.value = login_info.get("remember_password", False)
+
+            if self.remember_password_checkbox.value:
+                self.password_input.value = login_info.get("password", "")
+            else:
+                self.password_input.value = ""
+        
+        self.page.update()
+
+
     def get_view(self, page: ft.Page):
-        self.login_button.on_click = lambda e: asyncio.create_task(self.handle_login(page))
+        self.login_button.on_click = lambda e: asyncio.create_task(self.handle_login())
+        self.page : ft.Page = page
+
+        asyncio.create_task(self.__get_previous_login_info())
 
         return ft.View(
             route="/login",
@@ -78,6 +108,7 @@ class LoginView:
 
                                     self.user_input,
                                     self.password_input,
+                                    self.remember_password_checkbox,
 
                                     self.login_button,
                                 ],
@@ -90,7 +121,22 @@ class LoginView:
             ]
         )
 
-    async def handle_login(self, page: ft.Page):
+    async def __store_login_session(self):
+        data = {
+            "domain": self.domain_input.value,
+            "db": self.db_input.value,
+            "user": self.user_input.value,
+            "https": self.https_checkbox.value,
+            "password": self.password_input.value if self.remember_password_checkbox.value else "",
+            "remember_password": self.remember_password_checkbox.value
+        }
+
+        await self.page.shared_preferences.set(
+            "login_info",
+            json.dumps(data)
+        )
+
+    async def handle_login(self):
         # Validate
         if not all([
             self.domain_input.value,
@@ -98,7 +144,7 @@ class LoginView:
             self.user_input.value,
             self.password_input.value
         ]):
-            self.show_message(page, "All fields are required", True)
+            self.show_message(self.page, "Vui lòng điền đầy đủ thông tin", True)
             return
 
         # Build URL
@@ -112,21 +158,15 @@ class LoginView:
             username=self.user_input.value,
             password=self.password_input.value             
         )
-        page.session.store.set("client", client)
+        self.page.session.store.set("client", client)
 
         success = client.login()
 
-
         if success:
-            self.show_message(page, "Đăng nhập thành công.")
-            await page.push_route("/dashboard")         
-        else:
-            self.show_message(page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông tin.", True)
-            page.update()
+            await self.__store_login_session()
 
-    def show_message(self, page, text, is_error=False):
-        page.snack_bar = ft.SnackBar(
-            content=ft.Text(text),
-            bgcolor=ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400
-        )
-        page.show_dialog(page.snack_bar) 
+            Utils.show_message(self.page, "Đăng nhập thành công.")
+            await self.page.push_route("/dashboard")         
+        else:
+            Utils.show_message(self.page, "Đăng nhập thất bại, vui lòng kiểm tra lại thông tin.", True)
+            self.page.update()
