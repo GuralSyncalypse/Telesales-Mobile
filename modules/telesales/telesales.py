@@ -116,7 +116,7 @@ class TelesalesApp:
         self.page_info.update()
         lv.update()       
 
-    def __paginate(self, e, delta: int):
+    def next_page(self, e):
         if self.is_paginating:
             return
 
@@ -126,19 +126,27 @@ class TelesalesApp:
         btn.update()
 
         try:
-            self.current_page += delta
+            self.current_page += 1
             self.update_list()
         finally:
             self.is_paginating = False
             btn.update()
 
-        end = time.perf_counter()
-
-    def next_page(self, e):
-        self.__paginate(e, 1)
-
     def prev_page(self, e):
-        self.__paginate(e, -1)
+        if self.is_paginating:
+            return
+
+        self.is_paginating = True
+        btn = e.control
+        btn.disabled = True
+        btn.update()
+
+        try:
+            self.current_page -= 1
+            self.update_list()
+        finally:
+            self.is_paginating = False
+            btn.update()
 
     async def __on_exit(self, page : ft.Page, backroute):
         self.contacted_lv.controls.clear()
