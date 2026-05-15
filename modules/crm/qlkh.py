@@ -522,7 +522,6 @@ class CustomerApp:
             btn.update()
 
         end = time.perf_counter()
-        print(f"next_page took {end - start:.6f} seconds")
 
     def prev_page(self, e):
         if self.is_paginating:
@@ -543,7 +542,6 @@ class CustomerApp:
             btn.update()
 
         end = time.perf_counter()
-        print(f"next_page took {end - start:.6f} seconds")
 
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page

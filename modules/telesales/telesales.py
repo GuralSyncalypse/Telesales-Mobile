@@ -123,17 +123,12 @@ class TelesalesApp:
         btn.disabled = True
         btn.update()
 
-        start = time.perf_counter()
-
         try:
             self.current_page += delta
             self.update_list()
         finally:
             self.is_paginating = False
             btn.update()
-
-        end = time.perf_counter()
-        print(f"paginate took {end - start:.6f} seconds")
 
     def next_page(self, e):
         self.__paginate(e, 1)
