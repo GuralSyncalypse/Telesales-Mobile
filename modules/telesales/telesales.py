@@ -39,13 +39,13 @@ class TelesalesApp:
         )
         
         # List Views
-        self.not_called_lv = ft.ListView(
+        self.data_lv = ft.ListView(
             expand=True,
             spacing=10,
             divider_thickness=1
         )
 
-        self.called_lv = ft.ListView(
+        self.contacted_lv = ft.ListView(
             expand=True,
             spacing=10,
             divider_thickness=1
@@ -61,15 +61,17 @@ class TelesalesApp:
         self.filtered = []
         self.client = None
         self.phonebook = {
-            'called': [],
+            'contacted': [],
             'new': [],
             'invalid': []
         }
 
+        self.local_called_stack = []
+
     def __get_list_in_use(self):
         lists = [
-            self.not_called_lv,
-            self.called_lv,
+            self.data_lv,
+            self.contacted_lv,
             self.cancel_lv
         ]
         return lists[self.list_in_use]
@@ -77,7 +79,7 @@ class TelesalesApp:
     def __get_data_source(self):
         source = [
             self.phonebook['new'],
-            self.phonebook['called'],
+            self.phonebook['contacted'],
             self.phonebook['invalid']
         ]
         return source[self.list_in_use]
@@ -114,7 +116,7 @@ class TelesalesApp:
         self.page_info.update()
         lv.update()       
 
-    def __paginate(self, e, delta: int):
+    def next_page(self, e):
         if self.is_paginating:
             return
 
@@ -124,21 +126,31 @@ class TelesalesApp:
         btn.update()
 
         try:
-            self.current_page += delta
+            self.current_page += 1
             self.update_list()
         finally:
             self.is_paginating = False
             btn.update()
 
-    def next_page(self, e):
-        self.__paginate(e, 1)
-
     def prev_page(self, e):
-        self.__paginate(e, -1)
+        if self.is_paginating:
+            return
+
+        self.is_paginating = True
+        btn = e.control
+        btn.disabled = True
+        btn.update()
+
+        try:
+            self.current_page -= 1
+            self.update_list()
+        finally:
+            self.is_paginating = False
+            btn.update()
 
     async def __on_exit(self, page : ft.Page, backroute):
-        self.called_lv.controls.clear()
-        self.not_called_lv.controls.clear()
+        self.contacted_lv.controls.clear()
+        self.data_lv.controls.clear()
         self.is_editing = False
         self.is_syncing = False
     
@@ -182,27 +194,26 @@ class TelesalesApp:
         """
         if use_ui_counts:
             counts = {
-                "new": len(self.not_called_lv.controls),
-                "called": len(self.called_lv.controls),
+                "new": len(self.data_lv.controls),
+                "contacted": len(self.contacted_lv.controls),
                 "invalid": len(self.cancel_lv.controls)
             }
         else:
             counts = {
                 "new": len(self.phonebook['new']),
-                "called": len(self.phonebook['called']),
+                "contacted": len(self.phonebook['contacted']),
                 "invalid": len(self.phonebook['invalid'])
             }
         
         # Labels configuration to avoid repeating index logic
-        labels = [
-            f"Chưa gọi ({counts['new']})",
-            f"Đã gọi ({counts['called']})",
-            f"Đã hủy ({counts['invalid']})"
+        new_tabs_labels = [
+            f"{label} ({counts[key]})"
+            for key, label in self.tabs_labels
         ]
 
         # Update the actual Tab objects
         tabs_list = self.tabs.content.controls[0].tabs
-        for i, label in enumerate(labels):
+        for i, label in enumerate(new_tabs_labels):
             tabs_list[i].label = label
             tabs_list[i].update()
 
@@ -215,6 +226,12 @@ class TelesalesApp:
         self.update_list()
 
     def __build_tabs(self):
+        self.tabs_labels = [
+            ("new", "Cần xử lý"),
+            ("contacted", "Đã liên hệ"),
+            ("invalid", "Hủy"),
+        ]
+
         tabs = ft.Tabs(
             selected_index=0,
             on_change=self.on_tab_change,
@@ -225,16 +242,14 @@ class TelesalesApp:
                 controls=[
                     ft.TabBar(
                         tabs=[
-                            ft.Tab(label="Chưa gọi"),
-                            ft.Tab(label="Đã gọi"),
-                            ft.Tab(label="Hủy")
+                            ft.Tab(label=label) for _, label in self.tabs_labels
                         ],
                     ),
                     ft.TabBarView(
                         expand=True,
                         controls=[
-                            self.not_called_lv,
-                            self.called_lv,
+                            self.data_lv,
+                            self.contacted_lv,
                             self.cancel_lv
                         ],
                     ),
@@ -245,8 +260,54 @@ class TelesalesApp:
         return tabs
 
     def __build_tile(self, record):
-        name = record.get("name", "Không tên")
+        def on_call(e):
+            asyncio.create_task(self.make_call(e, phone=phone))
 
+        def confirm_cancel(e):
+            # 🔹 Find ListTile container
+            tile = e.control
+            while tile and not isinstance(tile, ft.ListTile):
+                tile = tile.parent
+            if not tile: return
+
+            record = e.control.data
+
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Xác nhận"),
+                content=ft.Text(
+                    f"Bạn có chắc muốn hủy số {record.get('phone')} không?"
+                ),
+                actions=[
+                    ft.TextButton(
+                        "Không",
+                        on_click=lambda e: self.page.pop_dialog()
+                    ),
+                    ft.FilledButton(
+                        "Có",
+                        on_click=lambda e: confirm_cancel_yes(tile)
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+
+            self.page.show_dialog(dialog)
+            self.page.update()
+
+        def confirm_cancel_yes(tile):
+            self.page.pop_dialog()
+
+            self.__move_to_invalid(tile)
+
+
+        status_ui = {
+            "new": (ft.Icons.PHONE_DISABLED, ft.Colors.GREY),
+            "callback": (ft.Icons.SCHEDULE, ft.Colors.ORANGE),
+            "contacted": (ft.Icons.CHECK_CIRCLE, ft.Colors.GREEN),
+            "invalid": (ft.Icons.CANCEL, ft.Colors.RED),
+        }
+
+        name = record.get("name", "Không tên")
         phone = record.get("phone", "Không SĐT")
         status = record.get("status")
         created_on = record.get("created_on")
@@ -262,59 +323,72 @@ class TelesalesApp:
         
         call_btn = ft.IconButton(
             icon=ft.Icons.PHONE,
-            icon_color=ft.Colors.GREEN, # Use ft.Colors for better IDE intellisense
+            icon_color=ft.Colors.GREEN,
             tooltip="Gọi",
-            on_click=partial(self.make_call, phone=phone)
+            on_click=on_call
         ) 
 
         switch_btn = ft.IconButton(
-            icon=ft.Icons.ARROW_BACK if status == 'called' else ft.Icons.ARROW_FORWARD,
+            icon=ft.Icons.ARROW_BACK if status == 'contacted' else ft.Icons.ARROW_FORWARD,
             icon_color=ft.Colors.BLUE,
+            tooltip="Chuyển trạng thái",
             data=record,
             on_click=self.__toggle_call_status
         )
 
         buttons = [call_btn, switch_btn]
 
-        if status == 'called':
+        if status == 'contacted':
             buttons.append(
                 ft.IconButton(
                     icon=ft.Icons.CANCEL,
                     icon_color=ft.Colors.BLUE,
                     data=record,
-                    on_click=self.__move_to_invalid
+                    on_click=confirm_cancel
                 )
             )
         
         if status == 'invalid':
             buttons = []
 
-        return ft.ListTile(
+        title_controls = [
+            ft.Text(
+                f"{name} • {phone}",
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_SURFACE if status not in ['contacted', 'invalid'] else ft.Colors.ON_SURFACE_VARIANT,
+                spans=[
+                    ft.TextSpan(
+                        style=ft.TextStyle(
+                            decoration=ft.TextDecoration.LINE_THROUGH
+                        )
+                    )
+                ] if status in ['contacted', 'invalid'] else []
+            )
+        ]
+
+        if status in ('new', 'callback'):
+            icon = ft.Icon(
+                status_ui[status][0],
+                size=24,
+                color=status_ui[status][1],
+            )
+            title_controls.insert(0, icon)
+
+        if is_new:
+            icon = ft.Icon(
+                ft.Icons.FIBER_NEW,
+                size=24,
+                color=ft.Colors.DEEP_ORANGE,
+            )
+            title_controls.insert(0, icon)
+
+        tile_obj = ft.ListTile(
             leading = ft.Icon(
                 ft.Icons.PERSON,
-                color=ft.Colors.ON_SURFACE_VARIANT if status == 'called' else ft.Colors.PRIMARY
+                color=ft.Colors.ON_SURFACE_VARIANT if status in ['contacted', 'invalid'] else ft.Colors.PRIMARY
             ),
             title=ft.Row(
-                controls=[
-                    ft.Icon(
-                        ft.Icons.NEW_RELEASES,
-                        size=16,
-                        color=ft.Colors.DEEP_ORANGE,
-                    ) if is_new else ft.Container(),
-
-                    ft.Text(
-                        f"{name} • {phone}",
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.ON_SURFACE if status != 'called' else ft.Colors.ON_SURFACE_VARIANT,
-                        spans=[
-                            ft.TextSpan(
-                                style=ft.TextStyle(
-                                    decoration=ft.TextDecoration.LINE_THROUGH
-                                )
-                            )
-                        ] if status == 'called' else []
-                    )
-                ],
+                controls=title_controls,
                 spacing=6,
             ),
             subtitle=ft.Text(
@@ -333,6 +407,8 @@ class TelesalesApp:
             ),
             shape=ft.RoundedRectangleBorder(radius=10)
         )
+
+        return tile_obj
 
     def get_view(self, page: ft.Page, back_route="/"):
         self.page = page
@@ -489,8 +565,8 @@ class TelesalesApp:
         status = record.get("status")
         
         # Define source/destination keys
-        src_key = 'called' if status == 'called' else 'new'
-        dst_key = 'new' if status == 'called' else 'called'
+        src_key = 'contacted' if status == 'contacted' else 'new'
+        dst_key = 'new' if status == 'contacted' else 'contacted'
 
         # 🔹 Find ListTile container
         tile = e.control
@@ -499,7 +575,7 @@ class TelesalesApp:
         if not tile: return
 
         # Update Data status
-        record["status"] = 'called' if status == 'new' else 'new'
+        record["status"] = 'contacted' if status == 'new' else 'new'
         self.phonebook[src_key].remove(record)
         self.phonebook[dst_key].append(record)
 
@@ -508,7 +584,7 @@ class TelesalesApp:
         self.filtered = self.__get_data_source().copy()
         self.update_list()
         
-        Utils.show_message(self.page, f"Moved to {dst_key.replace('_', ' ').title()}!")
+        Utils.show_message(self.page, f"Đã chuyển vào mục {dst_key.replace('_', ' ').title()}!")
 
         end = time.perf_counter()
 
@@ -519,7 +595,7 @@ class TelesalesApp:
 
         print(f"Elapsed time: {end - start:.6f} seconds")
 
-    def __move_to_invalid(self, e):
+    def __move_to_invalid(self, tile):
         def move(record):
             success = self.client.update_field(
                 model="sale.phonebook",
@@ -530,20 +606,12 @@ class TelesalesApp:
 
             if not success:
                 print("API failed!")
-
-        start = time.perf_counter()
     
-        record = e.control.data
-
-        # 🔹 Find ListTile container
-        tile = e.control
-        while tile and not isinstance(tile, ft.ListTile):
-            tile = tile.parent
-        if not tile: return
+        record = tile.data
 
         # Update Data status
         record["status"] = 'invalid'
-        self.phonebook['called'].remove(record)
+        self.phonebook['contacted'].remove(record)
         self.phonebook['invalid'].append(record)
 
         tile.trailing.controls = []
@@ -553,20 +621,17 @@ class TelesalesApp:
         self.filtered = self.__get_data_source().copy()
         self.update_list()
         
-        Utils.show_message(self.page, f"Canceled!")
-
-        end = time.perf_counter()
+        Utils.show_message(self.page, f"Đã hủy!")
 
         threading.Thread(
             target=move,
             args=(record,)
         ).start()
 
-        print(f"Elapsed time: {end - start:.6f} seconds")
 
     async def make_call(self, e, phone):
         await self.url_launcher.launch_url(f"tel:{phone}", )
-
+        
     async def fetch_data(self, e=None):
         if getattr(self, "_loading", False):
             self.update_list()
@@ -590,26 +655,26 @@ class TelesalesApp:
         self._loading = True
         try:
             required_fields = ['created_on', 'name', 'phone', 'status', 'note']
-            called_task = asyncio.to_thread(
+            get_contacted_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
-                [("status", "=", 'called')],
+                [("status", "=", 'contacted')],
                 required_fields
             )
 
-            not_called_task = asyncio.to_thread(
+            get_raw_task = asyncio.to_thread(
                 self.client.get_table,
                 "sale.phonebook",
-                [("status", "=", 'new')],
+                ['|', ("status", "=", 'new'),  ("status", "=", 'callback')],
                 required_fields
             )
 
             # 2. Run them concurrently
             # This returns a list containing the results of both calls in order
-            self.phonebook['called'], self.phonebook['new']= await asyncio.gather(
-                called_task,
-                not_called_task
-            )   
+            self.phonebook['contacted'], self.phonebook['new']= await asyncio.gather(
+                get_contacted_task,
+                get_raw_task
+            )
 
             self.filtered = self.__get_data_source().copy()
             self.update_list()     
